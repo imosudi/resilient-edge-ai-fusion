@@ -1,0 +1,19 @@
+# fusion_config.yaml
+# Late-fusion strategy for vision + LiDAR modalities.
+
+fusion:
+  strategy: weighted_average   # weighted_average | nms | learned
+  modalities:
+    - name: vision
+      weight: 0.6
+    - name: lidar
+      weight: 0.4
+
+  nms:
+    iou_threshold: 0.45
+    confidence_threshold: 0.25
+
+  fallback:
+    # Which modality to use when one stream is unavailable
+    vision_unavailable: lidar
+    lidar_unavailable: vision

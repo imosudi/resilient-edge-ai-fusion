@@ -1,0 +1,23 @@
+# model_config.yaml
+# YOLOv8 architecture and training hyperparameters.
+
+model:
+  architecture: yolov8n        # n / s / m / l / x
+  pretrained_weights: yolov8n.pt
+  input_size: [640, 640]
+  num_classes: 3
+
+training:
+  epochs: 100
+  batch_size: 16
+  learning_rate: 0.001
+  optimizer: AdamW
+  early_stopping_patience: 15
+  device: cpu                  # cpu | cuda | hailo
+
+export:
+  formats:
+    - onnx
+    - hef                      # Hailo Execution Format
+  output_dir: models/exported/
+  hailo_output_dir: models/hailo/

@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+
+# Data (large files — manage with DVC or Git LFS)
+dataset/images/*
+dataset/labels/*
+dataset/lidar/*
+dataset/degraded/*
+dataset/synchronised/*
+!dataset/**/.gitkeep
+
+# Model weights
+*.pt
+*.onnx
+*.hef
+
+# Logs and outputs
+logs/*
+exports/*
+!logs/.gitkeep
+!exports/.gitkeep
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local config overrides
+configs/*.local.yaml
+
+# Environment
+.env

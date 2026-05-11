@@ -1,0 +1,28 @@
+# dataset_config.yaml
+# Paths and parameters for dataset ingestion and splits.
+
+dataset:
+  root: dataset/
+  images_dir: dataset/images/
+  labels_dir: dataset/labels/
+  lidar_dir: dataset/lidar/
+  degraded_dir: dataset/degraded/
+  synchronised_dir: dataset/synchronised/
+
+splits:
+  train: 0.70
+  val: 0.15
+  test: 0.15
+  seed: 42
+
+classes:
+  - pedestrian
+  - cyclist
+  - vehicle
+
+degradation:
+  enabled: true
+  types:
+    - fog
+    - rain
+    - noise
