@@ -13,3 +13,35 @@
 
 Failure-aware edge AI perception system using Vision-LiDAR fusion on Raspberry Pi 5 and Hailo-8L for resilient real-time object detection under degraded sensing conditions.
 
+---
+
+## Research Objectives
+
+- Vision–LiDAR sensor fusion
+- Failure-aware edge perception
+- Adaptive confidence fusion
+- Robustness under degraded sensing
+- Real-time embedded AI inference
+- Edge AI resilience benchmarking
+
+---
+
+## Hardware Platform
+
+- Raspberry Pi 5
+- Hailo AI HAT+ (Hailo-8L)
+- Raspberry Pi Camera Module 3
+- Hokuyo URG-04LX-UG-01 LiDAR
+
+---
+
+## Core Technologies
+
+- YOLOv8n
+- ONNX
+- OpenCV
+- NumPy
+- Ultralytics
+- Python 3.11
+
+---
