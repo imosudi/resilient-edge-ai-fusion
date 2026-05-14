@@ -14,7 +14,7 @@ ultralytics
 albumentations
 numpy
 #>=1.24.0
-open3d
+#open3d
 #>=0.17.0
 opencv-python
 #>=4.8.0
