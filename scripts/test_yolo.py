@@ -6,7 +6,7 @@ import time
 model = YOLO("yolov8n.pt")
 
 # Load image
-image_path = "tests/test.jpg"
+image_path = "dataset/test.jpg"
 
 # Start timer
 start = time.time()
