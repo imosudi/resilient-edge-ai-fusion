@@ -1,23 +1,25 @@
 import os
 import time
 
-from preprocessing.lidar_projection import polar_to_cartesian, project_scan
-from preprocessing.lidar_projection import (
-    DEFAULT_END_ANGLE_DEG,
-    DEFAULT_MAX_DISTANCE_MM,
-    DEFAULT_MIN_DISTANCE_MM,
-    DEFAULT_START_ANGLE_DEG,
+from fusion.hardware_config import (
+    DEFAULT_HOKUYO_CLUSTER_COUNT,
+    DEFAULT_HOKUYO_END_STEP,
+    DEFAULT_HOKUYO_START_STEP,
+    DEFAULT_LIDAR_BAUDRATE,
+    DEFAULT_LIDAR_END_ANGLE_DEG,
+    DEFAULT_LIDAR_MAX_DISTANCE_MM,
+    DEFAULT_LIDAR_MIN_DISTANCE_MM,
+    DEFAULT_LIDAR_PORT,
+    DEFAULT_LIDAR_PROTOCOL,
+    DEFAULT_LIDAR_START_ANGLE_DEG,
+    DEFAULT_LIDAR_TIMEOUT,
 )
+from preprocessing.lidar_projection import polar_to_cartesian, project_scan
 
 try:
     import serial
 except ImportError:  # pragma: no cover
     serial = None
-
-
-DEFAULT_HOKUYO_START_STEP = 44
-DEFAULT_HOKUYO_END_STEP = 725
-DEFAULT_HOKUYO_CLUSTER_COUNT = 0
 
 
 def parse_range_line(line):
@@ -117,18 +119,18 @@ class LidarCapture:
 
     def __init__(
         self,
-        port="/dev/ttyACM0",
-        baudrate=115200,
-        timeout=1,
+        port=DEFAULT_LIDAR_PORT,
+        baudrate=DEFAULT_LIDAR_BAUDRATE,
+        timeout=DEFAULT_LIDAR_TIMEOUT,
         offline_log=None,
-        protocol="raw",
+        protocol=DEFAULT_LIDAR_PROTOCOL,
         hokuyo_start_step=DEFAULT_HOKUYO_START_STEP,
         hokuyo_end_step=DEFAULT_HOKUYO_END_STEP,
         hokuyo_cluster_count=DEFAULT_HOKUYO_CLUSTER_COUNT,
-        start_angle_deg=DEFAULT_START_ANGLE_DEG,
-        end_angle_deg=DEFAULT_END_ANGLE_DEG,
-        min_distance_mm=DEFAULT_MIN_DISTANCE_MM,
-        max_distance_mm=DEFAULT_MAX_DISTANCE_MM,
+        start_angle_deg=DEFAULT_LIDAR_START_ANGLE_DEG,
+        end_angle_deg=DEFAULT_LIDAR_END_ANGLE_DEG,
+        min_distance_mm=DEFAULT_LIDAR_MIN_DISTANCE_MM,
+        max_distance_mm=DEFAULT_LIDAR_MAX_DISTANCE_MM,
     ):
 
         self.port = port

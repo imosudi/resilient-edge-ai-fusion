@@ -5,6 +5,26 @@ import time
 import cv2
 
 from fusion.confidence_fusion import adaptive_fusion
+from fusion.hardware_config import (
+    CAMERA_BACKEND_CHOICES,
+    DEFAULT_CAMERA_BACKEND,
+    DEFAULT_CAMERA_HEIGHT,
+    DEFAULT_CAMERA_WIDTH,
+    DEFAULT_HOKUYO_CLUSTER_COUNT,
+    DEFAULT_HOKUYO_END_STEP,
+    DEFAULT_HOKUYO_START_STEP,
+    DEFAULT_LIDAR_BAUDRATE,
+    DEFAULT_LIDAR_END_ANGLE_DEG,
+    DEFAULT_LIDAR_MAX_DISTANCE_MM,
+    DEFAULT_LIDAR_MIN_DISTANCE_MM,
+    DEFAULT_LIDAR_PORT,
+    DEFAULT_LIDAR_PROTOCOL,
+    DEFAULT_LIDAR_START_ANGLE_DEG,
+    DEFAULT_LIDAR_TIMEOUT,
+    DEFAULT_MAX_FUSION_SAMPLES,
+    DEFAULT_STREAM_DURATION,
+    LIDAR_PROTOCOL_CHOICES,
+)
 from fusion.lidar import LidarCapture
 from fusion.synchronise import synchronise
 from fusion.vision import CameraCapture
@@ -44,21 +64,21 @@ class FusionPipeline:
         self,
         camera_source="camera",
         image_folder=None,
-        camera_backend="auto",
-        camera_width=640,
-        camera_height=480,
-        lidar_port="/dev/ttyACM0",
-        lidar_baudrate=115200,
-        lidar_timeout=1,
+        camera_backend=DEFAULT_CAMERA_BACKEND,
+        camera_width=DEFAULT_CAMERA_WIDTH,
+        camera_height=DEFAULT_CAMERA_HEIGHT,
+        lidar_port=DEFAULT_LIDAR_PORT,
+        lidar_baudrate=DEFAULT_LIDAR_BAUDRATE,
+        lidar_timeout=DEFAULT_LIDAR_TIMEOUT,
         lidar_log=None,
-        lidar_protocol="raw",
-        hokuyo_start_step=44,
-        hokuyo_end_step=725,
-        hokuyo_cluster_count=0,
-        lidar_start_angle=-120.0,
-        lidar_end_angle=120.0,
-        lidar_min_distance=20.0,
-        lidar_max_distance=4000.0,
+        lidar_protocol=DEFAULT_LIDAR_PROTOCOL,
+        hokuyo_start_step=DEFAULT_HOKUYO_START_STEP,
+        hokuyo_end_step=DEFAULT_HOKUYO_END_STEP,
+        hokuyo_cluster_count=DEFAULT_HOKUYO_CLUSTER_COUNT,
+        lidar_start_angle=DEFAULT_LIDAR_START_ANGLE_DEG,
+        lidar_end_angle=DEFAULT_LIDAR_END_ANGLE_DEG,
+        lidar_min_distance=DEFAULT_LIDAR_MIN_DISTANCE_MM,
+        lidar_max_distance=DEFAULT_LIDAR_MAX_DISTANCE_MM,
     ):
         self.camera_source = camera_source
         self.image_folder = image_folder
@@ -135,7 +155,7 @@ class FusionPipeline:
             ) * 1000.0,
         }
 
-    def run_offline(self, max_samples=20):
+    def run_offline(self, max_samples=DEFAULT_MAX_FUSION_SAMPLES):
         self.camera_source = "folder"
         self._open_camera()
         self._open_lidar()
@@ -168,7 +188,12 @@ class FusionPipeline:
         finally:
             self._close_resources()
 
-    def run_live(self, duration=10, max_samples=None, display=False):
+    def run_live(
+        self,
+        duration=DEFAULT_STREAM_DURATION,
+        max_samples=DEFAULT_MAX_FUSION_SAMPLES,
+        display=False,
+    ):
         self._open_camera()
         self._open_lidar()
 
@@ -238,15 +263,26 @@ class FusionPipeline:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run the Vision-LiDAR fusion pipeline.")
+    parser = argparse.ArgumentParser(
+        description="Run the Vision-LiDAR fusion pipeline.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument("--mode", choices=["live", "offline"], default="offline")
     parser.add_argument("--image-folder", default="dataset/images")
     parser.add_argument("--lidar-log", default=None)
-    parser.add_argument("--lidar-port", default="/dev/ttyACM0")
-    parser.add_argument("--lidar-protocol", choices=["raw", "hokuyo"], default="raw")
-    parser.add_argument("--camera-backend", default="auto")
-    parser.add_argument("--duration", type=int, default=10)
-    parser.add_argument("--max-samples", type=int, default=20)
+    parser.add_argument("--lidar-port", default=DEFAULT_LIDAR_PORT)
+    parser.add_argument(
+        "--lidar-protocol",
+        choices=LIDAR_PROTOCOL_CHOICES,
+        default=DEFAULT_LIDAR_PROTOCOL,
+    )
+    parser.add_argument(
+        "--camera-backend",
+        choices=CAMERA_BACKEND_CHOICES,
+        default=DEFAULT_CAMERA_BACKEND,
+    )
+    parser.add_argument("--duration", type=float, default=DEFAULT_STREAM_DURATION)
+    parser.add_argument("--max-samples", type=int, default=DEFAULT_MAX_FUSION_SAMPLES)
     parser.add_argument("--display", action="store_true")
     args = parser.parse_args()
 

@@ -1,9 +1,23 @@
 from scripts.lidar_capture import (
+    capture_lidar_lines,
     decode_scip_distances,
     decode_scip_value,
     render_lidar_view,
     summarise_lidar_line,
 )
+from scripts.camera_capture import capture_camera_frame, stream_camera_frames
+from fusion.hardware_config import (
+    DEFAULT_CAMERA_BACKEND,
+    DEFAULT_CAMERA_HEIGHT,
+    DEFAULT_CAMERA_STREAM_FPS,
+    DEFAULT_CAMERA_WIDTH,
+    DEFAULT_HOKUYO_END_STEP,
+    DEFAULT_HOKUYO_START_STEP,
+    DEFAULT_LIDAR_END_ANGLE_DEG,
+    DEFAULT_LIDAR_MAX_DISTANCE_MM,
+    DEFAULT_LIDAR_START_ANGLE_DEG,
+)
+from fusion.pipeline import FusionPipeline
 
 
 def test_summarise_lidar_line_detects_nearest_object():
@@ -45,6 +59,38 @@ def test_render_lidar_view_returns_canvas():
     )
 
     assert canvas.shape == (300, 300, 3)
+
+
+def test_lidar_capture_and_fusion_defaults_stay_aligned():
+    pipeline = FusionPipeline()
+
+    assert capture_lidar_lines.__defaults__[6] == DEFAULT_LIDAR_START_ANGLE_DEG
+    assert capture_lidar_lines.__defaults__[7] == DEFAULT_LIDAR_END_ANGLE_DEG
+    assert capture_lidar_lines.__defaults__[9] == DEFAULT_LIDAR_MAX_DISTANCE_MM
+    assert capture_lidar_lines.__defaults__[12] == DEFAULT_HOKUYO_START_STEP
+    assert capture_lidar_lines.__defaults__[13] == DEFAULT_HOKUYO_END_STEP
+
+    assert pipeline.lidar_start_angle == DEFAULT_LIDAR_START_ANGLE_DEG
+    assert pipeline.lidar_end_angle == DEFAULT_LIDAR_END_ANGLE_DEG
+    assert pipeline.lidar_max_distance == DEFAULT_LIDAR_MAX_DISTANCE_MM
+    assert pipeline.hokuyo_start_step == DEFAULT_HOKUYO_START_STEP
+    assert pipeline.hokuyo_end_step == DEFAULT_HOKUYO_END_STEP
+
+
+def test_camera_capture_and_fusion_defaults_stay_aligned():
+    pipeline = FusionPipeline()
+
+    assert capture_camera_frame.__defaults__[1] == DEFAULT_CAMERA_WIDTH
+    assert capture_camera_frame.__defaults__[2] == DEFAULT_CAMERA_HEIGHT
+    assert capture_camera_frame.__defaults__[5] == DEFAULT_CAMERA_BACKEND
+    assert stream_camera_frames.__defaults__[1] == DEFAULT_CAMERA_WIDTH
+    assert stream_camera_frames.__defaults__[2] == DEFAULT_CAMERA_HEIGHT
+    assert stream_camera_frames.__defaults__[3] == DEFAULT_CAMERA_BACKEND
+    assert stream_camera_frames.__defaults__[5] == DEFAULT_CAMERA_STREAM_FPS
+
+    assert pipeline.camera_width == DEFAULT_CAMERA_WIDTH
+    assert pipeline.camera_height == DEFAULT_CAMERA_HEIGHT
+    assert pipeline.camera_backend == DEFAULT_CAMERA_BACKEND
 
 
 def test_decode_scip_value():

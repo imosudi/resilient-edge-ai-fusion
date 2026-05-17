@@ -6,6 +6,13 @@ import subprocess
 import time
 from pathlib import Path
 
+from fusion.hardware_config import (
+    DEFAULT_CAMERA_BACKEND,
+    DEFAULT_CAMERA_DEVICE_INDEX,
+    DEFAULT_CAMERA_HEIGHT,
+    DEFAULT_CAMERA_WIDTH,
+)
+
 
 class CameraCapture:
 
@@ -13,10 +20,10 @@ class CameraCapture:
         self,
         source="camera",
         image_folder=None,
-        device_index=0,
-        width=640,
-        height=480,
-        camera_backend="auto",
+        device_index=DEFAULT_CAMERA_DEVICE_INDEX,
+        width=DEFAULT_CAMERA_WIDTH,
+        height=DEFAULT_CAMERA_HEIGHT,
+        camera_backend=DEFAULT_CAMERA_BACKEND,
     ):
 
         self.source = source

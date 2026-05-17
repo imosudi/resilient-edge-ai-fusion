@@ -5,6 +5,26 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from fusion.hardware_config import (
+    CAMERA_BACKEND_CHOICES,
+    DEFAULT_CAMERA_BACKEND,
+    DEFAULT_CAMERA_HEIGHT,
+    DEFAULT_CAMERA_WIDTH,
+    DEFAULT_HOKUYO_CLUSTER_COUNT,
+    DEFAULT_HOKUYO_END_STEP,
+    DEFAULT_HOKUYO_START_STEP,
+    DEFAULT_LIDAR_BAUDRATE,
+    DEFAULT_LIDAR_END_ANGLE_DEG,
+    DEFAULT_LIDAR_MAX_DISTANCE_MM,
+    DEFAULT_LIDAR_MIN_DISTANCE_MM,
+    DEFAULT_LIDAR_PORT,
+    DEFAULT_LIDAR_PROTOCOL,
+    DEFAULT_LIDAR_START_ANGLE_DEG,
+    DEFAULT_LIDAR_TIMEOUT,
+    DEFAULT_MAX_FUSION_SAMPLES,
+    DEFAULT_STREAM_DURATION,
+    LIDAR_PROTOCOL_CHOICES,
+)
 from fusion.pipeline import FusionPipeline
 
 logging.basicConfig(level=logging.INFO)
@@ -13,7 +33,8 @@ LOGGER = logging.getLogger("scripts.run_fusion")
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Run the resilient Vision-LiDAR fusion pipeline."
+        description="Run the resilient Vision-LiDAR fusion pipeline.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "--mode",
@@ -33,97 +54,97 @@ def parse_args():
     )
     parser.add_argument(
         "--lidar-port",
-        default="/dev/ttyACM0",
+        default=DEFAULT_LIDAR_PORT,
         help="Serial port for live LiDAR capture.",
     )
     parser.add_argument(
         "--lidar-baudrate",
         type=int,
-        default=115200,
+        default=DEFAULT_LIDAR_BAUDRATE,
         help="Serial baudrate for live LiDAR capture.",
     )
     parser.add_argument(
         "--lidar-timeout",
         type=float,
-        default=1,
+        default=DEFAULT_LIDAR_TIMEOUT,
         help="Serial timeout in seconds for live LiDAR capture.",
     )
     parser.add_argument(
         "--lidar-protocol",
-        choices=["raw", "hokuyo"],
-        default="raw",
+        choices=LIDAR_PROTOCOL_CHOICES,
+        default=DEFAULT_LIDAR_PROTOCOL,
         help="LiDAR input protocol. Use hokuyo for Hokuyo URG SCIP polling.",
     )
     parser.add_argument(
         "--hokuyo-start-step",
         type=int,
-        default=44,
+        default=DEFAULT_HOKUYO_START_STEP,
         help="Hokuyo SCIP start step for live scans.",
     )
     parser.add_argument(
         "--hokuyo-end-step",
         type=int,
-        default=725,
+        default=DEFAULT_HOKUYO_END_STEP,
         help="Hokuyo SCIP end step for live scans.",
     )
     parser.add_argument(
         "--hokuyo-cluster-count",
         type=int,
-        default=0,
+        default=DEFAULT_HOKUYO_CLUSTER_COUNT,
         help="Hokuyo SCIP cluster count for live scans.",
     )
     parser.add_argument(
         "--lidar-start-angle",
         type=float,
-        default=-120.0,
+        default=DEFAULT_LIDAR_START_ANGLE_DEG,
         help="Start angle in degrees for projecting LiDAR samples.",
     )
     parser.add_argument(
         "--lidar-end-angle",
         type=float,
-        default=120.0,
+        default=DEFAULT_LIDAR_END_ANGLE_DEG,
         help="End angle in degrees for projecting LiDAR samples.",
     )
     parser.add_argument(
         "--lidar-min-distance",
         type=float,
-        default=20.0,
+        default=DEFAULT_LIDAR_MIN_DISTANCE_MM,
         help="Minimum valid LiDAR distance in millimetres.",
     )
     parser.add_argument(
         "--lidar-max-distance",
         type=float,
-        default=4000.0,
+        default=DEFAULT_LIDAR_MAX_DISTANCE_MM,
         help="Maximum valid LiDAR distance in millimetres.",
     )
     parser.add_argument(
         "--camera-backend",
-        choices=["auto", "opencv", "picamera2", "libcamera"],
-        default="auto",
+        choices=CAMERA_BACKEND_CHOICES,
+        default=DEFAULT_CAMERA_BACKEND,
         help="Camera backend for live mode.",
     )
     parser.add_argument(
         "--camera-width",
         type=int,
-        default=640,
+        default=DEFAULT_CAMERA_WIDTH,
         help="Live camera frame width.",
     )
     parser.add_argument(
         "--camera-height",
         type=int,
-        default=480,
+        default=DEFAULT_CAMERA_HEIGHT,
         help="Live camera frame height.",
     )
     parser.add_argument(
         "--duration",
-        type=int,
-        default=10,
+        type=float,
+        default=DEFAULT_STREAM_DURATION,
         help="Live capture duration in seconds.",
     )
     parser.add_argument(
         "--max-samples",
         type=int,
-        default=20,
+        default=DEFAULT_MAX_FUSION_SAMPLES,
         help="Maximum number of fused samples.",
     )
     parser.add_argument(

@@ -5,30 +5,40 @@ import time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from fusion.lidar import parse_range_line
+from fusion.hardware_config import (
+    DEFAULT_HOKUYO_CLUSTER_COUNT,
+    DEFAULT_HOKUYO_END_STEP,
+    DEFAULT_HOKUYO_START_STEP,
+    DEFAULT_LIDAR_BAUDRATE,
+    DEFAULT_LIDAR_END_ANGLE_DEG,
+    DEFAULT_LIDAR_MAX_DISTANCE_MM,
+    DEFAULT_LIDAR_MAX_EMPTY_READS,
+    DEFAULT_LIDAR_MIN_DISTANCE_MM,
+    DEFAULT_LIDAR_PORT,
+    DEFAULT_LIDAR_PROTOCOL,
+    DEFAULT_LIDAR_START_ANGLE_DEG,
+    DEFAULT_LIDAR_TIMEOUT,
+    LIDAR_PROTOCOL_CHOICES,
+)
+from fusion.lidar import (
+    decode_scip_distances,
+    decode_scip_value,
+    initialise_hokuyo,
+    parse_range_line,
+    request_hokuyo_scan,
+)
 from preprocessing.lidar_projection import (
-    DEFAULT_END_ANGLE_DEG,
-    DEFAULT_MAX_DISTANCE_MM,
-    DEFAULT_MIN_DISTANCE_MM,
-    DEFAULT_START_ANGLE_DEG,
     polar_to_cartesian,
     scan_angles,
     valid_range_mask,
 )
 
 
-DEFAULT_HOKUYO_START_STEP = 256   # 384 - 128 44
-DEFAULT_HOKUYO_END_STEP = 512   # 384 + 128 725
-
-DEFAULT_HOKUYO_CLUSTER_COUNT = 0
-
-
-DEFAULT_START_ANGLE_DEG  =  -22.5   # 45° left
-DEFAULT_END_ANGLE_DEG    =   22.5   # 45° right
-DEFAULT_MIN_DISTANCE_MM  =   20.0   # unchanged — sensor minimum
-DEFAULT_MAX_DISTANCE_MM  = 2000.0   # 2 metres
-
-def open_serial_port(port="/dev/ttyACM0", baudrate=115200, timeout=1):
+def open_serial_port(
+    port=DEFAULT_LIDAR_PORT,
+    baudrate=DEFAULT_LIDAR_BAUDRATE,
+    timeout=DEFAULT_LIDAR_TIMEOUT,
+):
     try:
         import serial
     except ImportError as exc:
@@ -43,18 +53,18 @@ def open_serial_port(port="/dev/ttyACM0", baudrate=115200, timeout=1):
 
 
 def capture_lidar_lines(
-    port="/dev/ttyACM0",
-    baudrate=115200,
-    timeout=1,
-    max_empty_reads=10,
+    port=DEFAULT_LIDAR_PORT,
+    baudrate=DEFAULT_LIDAR_BAUDRATE,
+    timeout=DEFAULT_LIDAR_TIMEOUT,
+    max_empty_reads=DEFAULT_LIDAR_MAX_EMPTY_READS,
     max_lines=1,
     duration=None,
-    start_angle_deg=DEFAULT_START_ANGLE_DEG,
-    end_angle_deg=DEFAULT_END_ANGLE_DEG,
-    min_distance_mm=DEFAULT_MIN_DISTANCE_MM,
-    max_distance_mm=DEFAULT_MAX_DISTANCE_MM,
+    start_angle_deg=DEFAULT_LIDAR_START_ANGLE_DEG,
+    end_angle_deg=DEFAULT_LIDAR_END_ANGLE_DEG,
+    min_distance_mm=DEFAULT_LIDAR_MIN_DISTANCE_MM,
+    max_distance_mm=DEFAULT_LIDAR_MAX_DISTANCE_MM,
     show_window=False,
-    protocol="hokuyo",
+    protocol=DEFAULT_LIDAR_PROTOCOL,
     hokuyo_start_step=DEFAULT_HOKUYO_START_STEP,
     hokuyo_end_step=DEFAULT_HOKUYO_END_STEP,
     hokuyo_cluster_count=DEFAULT_HOKUYO_CLUSTER_COUNT,
@@ -85,7 +95,7 @@ def capture_lidar_lines(
                     end_step=hokuyo_end_step,
                     cluster_count=hokuyo_cluster_count,
                 )
-                line = ",".join(str(value) for value in ranges)
+                line = "" if ranges is None else ",".join(str(value) for value in ranges)
             else:
                 line = serial_port.readline().decode(errors="ignore").strip()
 
@@ -129,88 +139,12 @@ def capture_lidar_lines(
                 )
 
 
-def read_scip_response(serial_port):
-    lines = []
-    while True:
-        raw = serial_port.readline()
-        if not raw:
-            break
-
-        line = raw.decode(errors="ignore").rstrip("\r\n")
-        if line == "":
-            break
-
-        lines.append(line)
-
-    return lines
-
-
-def send_scip_command(serial_port, command):
-    serial_port.write(f"{command}\n".encode("ascii"))
-    serial_port.flush()
-    return read_scip_response(serial_port)
-
-
-def initialise_hokuyo(serial_port):
-    serial_port.reset_input_buffer()
-    send_scip_command(serial_port, "SCIP2.0")
-    response = send_scip_command(serial_port, "BM")
-    if response and len(response) >= 2 and not response[1].startswith(("00", "02")):
-        raise RuntimeError(f"Hokuyo laser start failed: {response}")
-
-
-def decode_scip_value(chars):
-    value = 0
-    for char in chars:
-        value = (value << 6) + (ord(char) - 0x30)
-    return value
-
-
-def decode_scip_distances(response_lines):
-    if len(response_lines) < 4:
-        return []
-
-    payload = ""
-    for line in response_lines[3:]:
-        if len(line) <= 1:
-            continue
-
-        payload += line[:-1]
-
-    distances = []
-    chunk_size = 3
-    for index in range(0, len(payload) - chunk_size + 1, chunk_size):
-        chunk = payload[index:index + chunk_size]
-        distances.append(decode_scip_value(chunk))
-
-    return distances
-
-
-def request_hokuyo_scan(
-    serial_port,
-    start_step=DEFAULT_HOKUYO_START_STEP,
-    end_step=DEFAULT_HOKUYO_END_STEP,
-    cluster_count=DEFAULT_HOKUYO_CLUSTER_COUNT,
-):
-    command = f"GD{start_step:04d}{end_step:04d}{cluster_count:02d}"
-    response = send_scip_command(serial_port, command)
-
-    if len(response) >= 2 and not response[1].startswith("00"):
-        raise RuntimeError(f"Hokuyo scan request failed: {response}")
-
-    distances = decode_scip_distances(response)
-    if not distances:
-        raise TimeoutError("Hokuyo returned no distance samples")
-
-    return distances
-
-
 def render_lidar_view(
     line,
-    start_angle_deg=DEFAULT_START_ANGLE_DEG,
-    end_angle_deg=DEFAULT_END_ANGLE_DEG,
-    min_distance_mm=DEFAULT_MIN_DISTANCE_MM,
-    max_distance_mm=DEFAULT_MAX_DISTANCE_MM,
+    start_angle_deg=DEFAULT_LIDAR_START_ANGLE_DEG,
+    end_angle_deg=DEFAULT_LIDAR_END_ANGLE_DEG,
+    min_distance_mm=DEFAULT_LIDAR_MIN_DISTANCE_MM,
+    max_distance_mm=DEFAULT_LIDAR_MAX_DISTANCE_MM,
     canvas_size=700,
 ):
     import cv2
@@ -328,10 +262,10 @@ def render_lidar_view(
 
 def show_lidar_window(
     line,
-    start_angle_deg=DEFAULT_START_ANGLE_DEG,
-    end_angle_deg=DEFAULT_END_ANGLE_DEG,
-    min_distance_mm=DEFAULT_MIN_DISTANCE_MM,
-    max_distance_mm=DEFAULT_MAX_DISTANCE_MM,
+    start_angle_deg=DEFAULT_LIDAR_START_ANGLE_DEG,
+    end_angle_deg=DEFAULT_LIDAR_END_ANGLE_DEG,
+    min_distance_mm=DEFAULT_LIDAR_MIN_DISTANCE_MM,
+    max_distance_mm=DEFAULT_LIDAR_MAX_DISTANCE_MM,
     wait_ms=1,
 ):
     import cv2
@@ -353,10 +287,10 @@ def show_lidar_window(
 
 def summarise_lidar_line(
     line,
-    start_angle_deg=DEFAULT_START_ANGLE_DEG,
-    end_angle_deg=DEFAULT_END_ANGLE_DEG,
-    min_distance_mm=DEFAULT_MIN_DISTANCE_MM,
-    max_distance_mm=DEFAULT_MAX_DISTANCE_MM,
+    start_angle_deg=DEFAULT_LIDAR_START_ANGLE_DEG,
+    end_angle_deg=DEFAULT_LIDAR_END_ANGLE_DEG,
+    min_distance_mm=DEFAULT_LIDAR_MIN_DISTANCE_MM,
+    max_distance_mm=DEFAULT_LIDAR_MAX_DISTANCE_MM,
 ):
     ranges = parse_range_line(line)
     angles = scan_angles(
@@ -394,10 +328,10 @@ def summarise_lidar_line(
 
 def print_lidar_sample_summary(
     line,
-    start_angle_deg=DEFAULT_START_ANGLE_DEG,
-    end_angle_deg=DEFAULT_END_ANGLE_DEG,
-    min_distance_mm=DEFAULT_MIN_DISTANCE_MM,
-    max_distance_mm=DEFAULT_MAX_DISTANCE_MM,
+    start_angle_deg=DEFAULT_LIDAR_START_ANGLE_DEG,
+    end_angle_deg=DEFAULT_LIDAR_END_ANGLE_DEG,
+    min_distance_mm=DEFAULT_LIDAR_MIN_DISTANCE_MM,
+    max_distance_mm=DEFAULT_LIDAR_MAX_DISTANCE_MM,
 ):
     summary = summarise_lidar_line(
         line=line,
@@ -433,14 +367,27 @@ def print_lidar_sample_summary(
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Capture raw LiDAR serial lines.")
-    parser.add_argument("--port", default="/dev/ttyACM0")
-    parser.add_argument("--baudrate", type=int, default=115200)
-    parser.add_argument("--timeout", type=float, default=1)
+    parser = argparse.ArgumentParser(
+        description="Capture raw LiDAR serial lines.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("--port", default=DEFAULT_LIDAR_PORT, help="LiDAR serial port.")
+    parser.add_argument(
+        "--baudrate",
+        type=int,
+        default=DEFAULT_LIDAR_BAUDRATE,
+        help="LiDAR serial baudrate.",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_LIDAR_TIMEOUT,
+        help="LiDAR serial timeout in seconds.",
+    )
     parser.add_argument(
         "--protocol",
-        choices=["hokuyo", "raw"],
-        default="hokuyo",
+        choices=LIDAR_PROTOCOL_CHOICES,
+        default=DEFAULT_LIDAR_PROTOCOL,
         help="LiDAR protocol. Hokuyo mode polls SCIP scans; raw mode reads text lines.",
     )
     parser.add_argument(
@@ -461,14 +408,34 @@ def parse_args():
         default=DEFAULT_HOKUYO_CLUSTER_COUNT,
         help="Hokuyo SCIP cluster count for GD scan command.",
     )
-    parser.add_argument("--start-angle", type=float, default=DEFAULT_START_ANGLE_DEG)
-    parser.add_argument("--end-angle", type=float, default=DEFAULT_END_ANGLE_DEG)
-    parser.add_argument("--min-distance-mm", type=float, default=DEFAULT_MIN_DISTANCE_MM)
-    parser.add_argument("--max-distance-mm", type=float, default=DEFAULT_MAX_DISTANCE_MM)
+    parser.add_argument(
+        "--start-angle",
+        type=float,
+        default=DEFAULT_LIDAR_START_ANGLE_DEG,
+        help="Start angle in degrees for projecting LiDAR samples.",
+    )
+    parser.add_argument(
+        "--end-angle",
+        type=float,
+        default=DEFAULT_LIDAR_END_ANGLE_DEG,
+        help="End angle in degrees for projecting LiDAR samples.",
+    )
+    parser.add_argument(
+        "--min-distance-mm",
+        type=float,
+        default=DEFAULT_LIDAR_MIN_DISTANCE_MM,
+        help="Minimum valid LiDAR distance in millimetres.",
+    )
+    parser.add_argument(
+        "--max-distance-mm",
+        type=float,
+        default=DEFAULT_LIDAR_MAX_DISTANCE_MM,
+        help="Maximum valid LiDAR distance in millimetres.",
+    )
     parser.add_argument(
         "--max-empty-reads",
         type=int,
-        default=10,
+        default=DEFAULT_LIDAR_MAX_EMPTY_READS,
         help="Stop with a clear error after this many empty reads.",
     )
     parser.add_argument(

@@ -10,16 +10,27 @@ import cv2
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from fusion.hardware_config import (
+    CAMERA_BACKEND_CHOICES,
+    DEFAULT_CAMERA_BACKEND,
+    DEFAULT_CAMERA_DEVICE_INDEX,
+    DEFAULT_CAMERA_HEIGHT,
+    DEFAULT_CAMERA_OUTPUT,
+    DEFAULT_CAMERA_STREAM_FPS,
+    DEFAULT_CAMERA_STREAM_OUTPUT,
+    DEFAULT_CAMERA_WIDTH,
+    DEFAULT_STREAM_DURATION,
+)
 from fusion.vision import CameraCapture
 
 
 def capture_camera_frame(
-    device_index=0,
-    width=640,
-    height=480,
-    output_path="captures/camera_test.jpg",
+    device_index=DEFAULT_CAMERA_DEVICE_INDEX,
+    width=DEFAULT_CAMERA_WIDTH,
+    height=DEFAULT_CAMERA_HEIGHT,
+    output_path=DEFAULT_CAMERA_OUTPUT,
     show_window=False,
-    backend="auto",
+    backend=DEFAULT_CAMERA_BACKEND,
 ):
     if backend == "libcamera":
         return capture_with_libcamera(
@@ -58,14 +69,14 @@ def capture_camera_frame(
 
 
 def stream_camera_frames(
-    device_index=0,
-    width=640,
-    height=480,
-    backend="auto",
-    duration=10,
-    fps=5,
+    device_index=DEFAULT_CAMERA_DEVICE_INDEX,
+    width=DEFAULT_CAMERA_WIDTH,
+    height=DEFAULT_CAMERA_HEIGHT,
+    backend=DEFAULT_CAMERA_BACKEND,
+    duration=DEFAULT_STREAM_DURATION,
+    fps=DEFAULT_CAMERA_STREAM_FPS,
     show_window=False,
-    output_path="captures/camera_stream_last.jpg",
+    output_path=DEFAULT_CAMERA_STREAM_OUTPUT,
 ):
     if backend == "libcamera":
         return stream_with_libcamera_stills(
@@ -152,12 +163,12 @@ def stream_camera_frames(
 
 
 def stream_with_libcamera_stills(
-    width=640,
-    height=480,
-    duration=10,
+    width=DEFAULT_CAMERA_WIDTH,
+    height=DEFAULT_CAMERA_HEIGHT,
+    duration=DEFAULT_STREAM_DURATION,
     fps=1,
     show_window=False,
-    output_path="captures/camera_stream_last.jpg",
+    output_path=DEFAULT_CAMERA_STREAM_OUTPUT,
 ):
     frame_count = 0
     interval = 1.0 / fps if fps > 0 else 0.0
@@ -213,12 +224,12 @@ def save_last_stream_frame(image, output_path):
 
 
 def capture_with_camera_capture(
-    device_index=0,
-    width=640,
-    height=480,
-    output_path="captures/camera_test.jpg",
+    device_index=DEFAULT_CAMERA_DEVICE_INDEX,
+    width=DEFAULT_CAMERA_WIDTH,
+    height=DEFAULT_CAMERA_HEIGHT,
+    output_path=DEFAULT_CAMERA_OUTPUT,
     show_window=False,
-    backend="auto",
+    backend=DEFAULT_CAMERA_BACKEND,
 ):
     camera = CameraCapture(
         source="camera",
@@ -254,9 +265,9 @@ def capture_with_camera_capture(
 
 
 def capture_with_libcamera(
-    width=640,
-    height=480,
-    output_path="captures/camera_test.jpg",
+    width=DEFAULT_CAMERA_WIDTH,
+    height=DEFAULT_CAMERA_HEIGHT,
+    output_path=DEFAULT_CAMERA_OUTPUT,
     show_window=False,
 ):
     camera_command = shutil.which("rpicam-still") or shutil.which("libcamera-still")
@@ -302,15 +313,37 @@ def capture_with_libcamera(
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Capture one test frame from camera.")
-    parser.add_argument("--device-index", type=int, default=0)
-    parser.add_argument("--width", type=int, default=640)
-    parser.add_argument("--height", type=int, default=480)
-    parser.add_argument("--output", default="captures/camera_test.jpg")
+    parser = argparse.ArgumentParser(
+        description="Capture one test frame from camera.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--device-index",
+        type=int,
+        default=DEFAULT_CAMERA_DEVICE_INDEX,
+        help="OpenCV camera device index.",
+    )
+    parser.add_argument(
+        "--width",
+        type=int,
+        default=DEFAULT_CAMERA_WIDTH,
+        help="Camera frame width.",
+    )
+    parser.add_argument(
+        "--height",
+        type=int,
+        default=DEFAULT_CAMERA_HEIGHT,
+        help="Camera frame height.",
+    )
+    parser.add_argument(
+        "--output",
+        default=DEFAULT_CAMERA_OUTPUT,
+        help="Output image path.",
+    )
     parser.add_argument(
         "--backend",
-        choices=["auto", "opencv", "picamera2", "libcamera"],
-        default="auto",
+        choices=CAMERA_BACKEND_CHOICES,
+        default=DEFAULT_CAMERA_BACKEND,
         help="Camera backend. Use picamera2 or libcamera for Raspberry Pi Camera Module.",
     )
     parser.add_argument(
@@ -328,13 +361,13 @@ def parse_args():
     parser.add_argument(
         "--duration",
         type=float,
-        default=10,
+        default=DEFAULT_STREAM_DURATION,
         help="Live stream test duration in seconds.",
     )
     parser.add_argument(
         "--fps",
         type=float,
-        default=5,
+        default=DEFAULT_CAMERA_STREAM_FPS,
         help="Target stream test frame rate.",
     )
     return parser.parse_args()
@@ -355,13 +388,17 @@ def print_camera_error(error):
 
 def main():
     args = parse_args()
+    output_path = args.output
+    if args.stream and output_path == DEFAULT_CAMERA_OUTPUT:
+        output_path = DEFAULT_CAMERA_STREAM_OUTPUT
+
     try:
         if args.stream:
             result = stream_camera_frames(
                 device_index=args.device_index,
                 width=args.width,
                 height=args.height,
-                output_path=args.output,
+                output_path=output_path,
                 show_window=args.show_window,
                 backend=args.backend,
                 duration=args.duration,
@@ -372,7 +409,7 @@ def main():
                 device_index=args.device_index,
                 width=args.width,
                 height=args.height,
-                output_path=args.output,
+                output_path=output_path,
                 show_window=args.show_window,
                 backend=args.backend,
             )
