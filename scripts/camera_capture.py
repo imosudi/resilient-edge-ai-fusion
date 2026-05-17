@@ -38,16 +38,23 @@ def capture_camera_frame(
             show_window=show_window,
             backend=backend,
         )
-    except RuntimeError:
+    except RuntimeError as camera_error:
         if backend != "auto":
             raise
 
-        return capture_with_libcamera(
-            width=width,
-            height=height,
-            output_path=output_path,
-            show_window=show_window,
-        )
+        try:
+            return capture_with_libcamera(
+                width=width,
+                height=height,
+                output_path=output_path,
+                show_window=show_window,
+            )
+        except RuntimeError as libcamera_error:
+            raise RuntimeError(
+                "All camera backends failed. "
+                f"OpenCV/Picamera2: {camera_error}. "
+                f"libcamera/rpicam: {libcamera_error}."
+            ) from libcamera_error
 
 
 def capture_with_camera_capture(
@@ -116,7 +123,11 @@ def capture_with_libcamera(
         "-o",
         str(output),
     ]
-    subprocess.run(command, check=True)
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        details = exc.stderr.strip() or exc.stdout.strip() or str(exc)
+        raise RuntimeError(f"{Path(camera_command).name} failed: {details}") from exc
 
     image = cv2.imread(str(output))
     if image is None:
@@ -155,23 +166,40 @@ def parse_args():
     return parser.parse_args()
 
 
+def print_camera_error(error):
+    print("\nCamera test failed")
+    print(f"Reason: {error}")
+    print("\nSuggested checks:")
+    print("- Raspberry Pi Camera Module: try --backend picamera2 or --backend libcamera")
+    print("- Check detection with: rpicam-hello --list-cameras")
+    print("- Older Raspberry Pi OS: libcamera-hello --list-cameras")
+    print("- Make sure the ribbon cable is seated and the camera is enabled")
+    print("- If using Picamera2 in a venv, install/enable the system Picamera2 package")
+    print("- USB webcam: try --backend opencv --device-index 0 or --device-index 1")
+
+
 def main():
     args = parse_args()
-    result = capture_camera_frame(
-        device_index=args.device_index,
-        width=args.width,
-        height=args.height,
-        output_path=args.output,
-        show_window=args.show_window,
-        backend=args.backend,
-    )
+    try:
+        result = capture_camera_frame(
+            device_index=args.device_index,
+            width=args.width,
+            height=args.height,
+            output_path=args.output,
+            show_window=args.show_window,
+            backend=args.backend,
+        )
+    except (RuntimeError, FileNotFoundError, OSError) as exc:
+        print_camera_error(exc)
+        return 1
 
     print("Camera connected successfully")
     print(f"Captured frame: {result['path']}")
     print(f"Image shape: {result['shape']}")
     print(f"Backend: {result['backend']}")
     print(f"Timestamp: {result['timestamp']}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
