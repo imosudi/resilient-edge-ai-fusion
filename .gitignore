@@ -238,3 +238,5 @@ exports/
 *.hef
 
 .DS_Store
+
+camera_test.jpg

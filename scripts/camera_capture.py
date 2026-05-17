@@ -1,6 +1,9 @@
 import argparse
 import os
+import shutil
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 import cv2
@@ -16,14 +19,52 @@ def capture_camera_frame(
     height=480,
     output_path="captures/camera_test.jpg",
     show_window=False,
+    backend="auto",
+):
+    if backend == "libcamera":
+        return capture_with_libcamera(
+            width=width,
+            height=height,
+            output_path=output_path,
+            show_window=show_window,
+        )
+
+    try:
+        return capture_with_camera_capture(
+            device_index=device_index,
+            width=width,
+            height=height,
+            output_path=output_path,
+            show_window=show_window,
+            backend=backend,
+        )
+    except RuntimeError:
+        if backend != "auto":
+            raise
+
+        return capture_with_libcamera(
+            width=width,
+            height=height,
+            output_path=output_path,
+            show_window=show_window,
+        )
+
+
+def capture_with_camera_capture(
+    device_index=0,
+    width=640,
+    height=480,
+    output_path="captures/camera_test.jpg",
+    show_window=False,
+    backend="auto",
 ):
     camera = CameraCapture(
         source="camera",
         device_index=device_index,
         width=width,
         height=height,
+        camera_backend=backend,
     )
-
     try:
         frame = camera.get_frame()
         image = frame["image"]
@@ -43,10 +84,55 @@ def capture_camera_frame(
             "timestamp": frame["timestamp"],
             "path": str(output),
             "shape": image.shape,
+            "backend": frame.get("camera_backend", backend),
         }
 
     finally:
         camera.release()
+
+
+def capture_with_libcamera(
+    width=640,
+    height=480,
+    output_path="captures/camera_test.jpg",
+    show_window=False,
+):
+    camera_command = shutil.which("rpicam-still") or shutil.which("libcamera-still")
+    if camera_command is None:
+        raise RuntimeError("Neither rpicam-still nor libcamera-still was found")
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    command = [
+        camera_command,
+        "-n",
+        "--width",
+        str(width),
+        "--height",
+        str(height),
+        "--timeout",
+        "1000",
+        "-o",
+        str(output),
+    ]
+    subprocess.run(command, check=True)
+
+    image = cv2.imread(str(output))
+    if image is None:
+        raise RuntimeError(f"Camera command ran, but output could not be read: {output}")
+
+    if show_window:
+        cv2.imshow("Camera Test", image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+    return {
+        "timestamp": time.time(),
+        "path": str(output),
+        "shape": image.shape,
+        "backend": Path(camera_command).name,
+    }
 
 
 def parse_args():
@@ -55,6 +141,12 @@ def parse_args():
     parser.add_argument("--width", type=int, default=640)
     parser.add_argument("--height", type=int, default=480)
     parser.add_argument("--output", default="captures/camera_test.jpg")
+    parser.add_argument(
+        "--backend",
+        choices=["auto", "opencv", "picamera2", "libcamera"],
+        default="auto",
+        help="Camera backend. Use picamera2 or libcamera for Raspberry Pi Camera Module.",
+    )
     parser.add_argument(
         "--show-window",
         action="store_true",
@@ -71,11 +163,13 @@ def main():
         height=args.height,
         output_path=args.output,
         show_window=args.show_window,
+        backend=args.backend,
     )
 
     print("Camera connected successfully")
     print(f"Captured frame: {result['path']}")
     print(f"Image shape: {result['shape']}")
+    print(f"Backend: {result['backend']}")
     print(f"Timestamp: {result['timestamp']}")
 
 
