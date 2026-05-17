@@ -1,3 +1,6 @@
+#sudo usermod -a -G dialout $USER
+#python scripts/lidar_capture.py --port /dev/ttyACM0 --baudrate 115200
+
 import argparse
 import time
 
