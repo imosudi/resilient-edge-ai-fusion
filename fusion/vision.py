@@ -1,7 +1,10 @@
 import cv2
 import glob
 import os
+import shutil
+import subprocess
 import time
+from pathlib import Path
 
 
 class CameraCapture:
@@ -27,6 +30,8 @@ class CameraCapture:
         self._current_index = 0
         self.cap = None
         self.picam2 = None
+        self.libcamera_command = None
+        self._libcamera_frame_path = Path("/tmp/resilient_edge_ai_camera_frame.jpg")
 
         if self.source == "camera":
             self._open_camera()
@@ -74,6 +79,15 @@ class CameraCapture:
                 if self.camera_backend == "picamera2":
                     raise
 
+        if self.camera_backend in ("auto", "libcamera"):
+            try:
+                self._open_libcamera_camera()
+                return
+            except RuntimeError as exc:
+                errors.append(str(exc))
+                if self.camera_backend == "libcamera":
+                    raise
+
         raise RuntimeError("Unable to open camera. " + " | ".join(errors))
 
     def _open_opencv_camera(self):
@@ -108,6 +122,16 @@ class CameraCapture:
         time.sleep(0.2)
         self.camera_backend = "picamera2"
 
+    def _open_libcamera_camera(self):
+        self.libcamera_command = (
+            shutil.which("rpicam-still")
+            or shutil.which("libcamera-still")
+        )
+        if self.libcamera_command is None:
+            raise RuntimeError("Neither rpicam-still nor libcamera-still was found")
+
+        self.camera_backend = "libcamera"
+
     def get_frame(self):
 
         timestamp = time.time()
@@ -137,6 +161,42 @@ class CameraCapture:
                     raise RuntimeError("Failed to read frame from Picamera2")
 
                 image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+                return {
+                    "timestamp": timestamp,
+                    "image": image,
+                    "source": "camera",
+                    "device_index": self.device_index,
+                    "camera_backend": self.camera_backend,
+                }
+
+            if self.camera_backend == "libcamera":
+                command = [
+                    self.libcamera_command,
+                    "-n",
+                    "--width",
+                    str(self.width),
+                    "--height",
+                    str(self.height),
+                    "--timeout",
+                    "1",
+                    "-o",
+                    str(self._libcamera_frame_path),
+                ]
+                try:
+                    subprocess.run(
+                        command,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                except subprocess.CalledProcessError as exc:
+                    details = exc.stderr.strip() or exc.stdout.strip() or str(exc)
+                    raise RuntimeError(f"libcamera frame capture failed: {details}") from exc
+
+                image = cv2.imread(str(self._libcamera_frame_path))
+                if image is None:
+                    raise RuntimeError("Failed to read libcamera frame output")
+
                 return {
                     "timestamp": timestamp,
                     "image": image,
