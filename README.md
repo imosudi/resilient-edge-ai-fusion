@@ -13,7 +13,7 @@
 
 Failure-aware edge AI perception system using Vision-LiDAR fusion on Raspberry Pi 5 and Hailo-8L for resilient real-time object detection under degraded sensing conditions.
 
----
+
 
 ## Research Objectives
 
@@ -24,7 +24,7 @@ Failure-aware edge AI perception system using Vision-LiDAR fusion on Raspberry P
 - Real-time embedded AI inference
 - Edge AI resilience benchmarking
 
----
+
 
 ## Hardware Platform
 
@@ -33,7 +33,7 @@ Failure-aware edge AI perception system using Vision-LiDAR fusion on Raspberry P
 - Raspberry Pi Camera Module 3
 - Hokuyo URG-04LX-UG-01 LiDAR
 
----
+
 
 ## Core Technologies
 
@@ -44,4 +44,26 @@ Failure-aware edge AI perception system using Vision-LiDAR fusion on Raspberry P
 - Ultralytics
 - Python 3.11
 
----
+## Documentation
+
+- [Technical Project Description](TECHNICAL_PROJECT_DESCRIPTION.md)
+
+## Usage
+
+Run the offline fusion pipeline using a local image folder and LiDAR log:
+
+```bash
+python scripts/run_fusion.py --mode offline \
+  --image-folder dataset/images \
+  --lidar-log dataset/lidar.log \
+  --max-samples 20
+```
+
+Important:
+- `--mode offline` runs playback mode rather than live capture.
+- `--image-folder` should point to the directory containing test frames.
+- `--lidar-log` should point to a text log file with LiDAR range lines.
+- `--max-samples` controls the number of fused samples produced.
+
+Note:
+sudo apt install fonts-dejavu-core

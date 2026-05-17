@@ -1,34 +1,39 @@
-from ultralytics import YOLO
-import cv2
 import time
 
-# Load model
-model = YOLO("yolov8n.pt")
 
-# Load image
-image_path = "dataset/test.jpg"
+def run_yolo_smoke_test(
+    model_path="yolov8n.pt",
+    image_path="dataset/test.jpg",
+    show_window=True,
+):
+    import cv2
+    from ultralytics import YOLO
 
-# Start timer
-start = time.time()
+    model = YOLO(model_path)
+    model(image_path)
 
-# Run inference
-results = model(image_path)
+    start = time.time()
+    results = model(image_path)
+    end = time.time()
 
-# End timer
-end = time.time()
+    annotated_frame = results[0].plot()
+    if show_window:
+        cv2.imshow("YOLOv8n Detection", annotated_frame)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
-# Calculate latency
-latency_ms = (end - start) * 1000
+    return {
+        "latency_ms": (end - start) * 1000,
+        "boxes": results[0].boxes,
+    }
 
-print(f"Inference Latency: {latency_ms:.2f} ms")
 
-# Display results
-annotated_frame = results[0].plot()
+def main():
+    result = run_yolo_smoke_test()
 
-cv2.imshow("YOLOv8n Detection", annotated_frame)
+    print(f"Inference Latency: {result['latency_ms']:.2f} ms")
+    print(result["boxes"])
 
-cv2.waitKey(0)
-cv2.destroyAllWindows()
 
-# Print detections
-print(results[0].boxes)
+if __name__ == "__main__":
+    main()

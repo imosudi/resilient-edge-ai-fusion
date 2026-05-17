@@ -1,32 +1,66 @@
 import time
-import psutil
-from ultralytics import YOLO
+from pathlib import Path
 
-# Load model
-model = YOLO("yolov8n.pt")
 
-image = "dataset/test.jpg"
+latency_ms = None
+fps = None
 
-# CPU usage before inference
-cpu_before = psutil.cpu_percent()
 
-# Start timing
-start = time.time()
+def measure_yolo_baseline(
+    model_path="yolov8n.pt",
+    image_path="dataset/test.jpg",
+    csv_path="metrics/results.csv",
+):
+    """Run a YOLO baseline inference pass and persist latency metrics."""
+    import pandas as pd
+    import psutil
+    from ultralytics import YOLO
 
-# Run inference
-results = model(image)
+    model = YOLO(model_path)
+    model(image_path)
 
-# End timing
-end = time.time()
+    cpu_before = psutil.cpu_percent(interval=0.1)
 
-# CPU usage after inference
-cpu_after = psutil.cpu_percent()
+    start = time.time()
+    model(image_path)
+    end = time.time()
 
-# Metrics
-latency_ms = (end - start) * 1000
-fps = 1 / (end - start)
+    cpu_after = psutil.cpu_percent(interval=0.1)
+    inference_time = end - start
 
-print(f"Latency: {latency_ms:.2f} ms")
-print(f"FPS: {fps:.2f}")
-print(f"CPU Usage Before: {cpu_before}%")
-print(f"CPU Usage After: {cpu_after}%")
+    metrics = {
+        "latency_ms": inference_time * 1000,
+        "fps": 1 / inference_time,
+        "cpu_before": cpu_before,
+        "cpu_after": cpu_after,
+    }
+
+    output_path = Path(csv_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    df = pd.DataFrame([metrics])
+    if output_path.exists():
+        df.to_csv(output_path, mode="a", header=False, index=False)
+    else:
+        df.to_csv(output_path, index=False)
+
+    return metrics
+
+
+def main():
+    metrics = measure_yolo_baseline()
+
+    global latency_ms, fps
+    latency_ms = metrics["latency_ms"]
+    fps = metrics["fps"]
+
+    print("\n=== Baseline Metrics ===")
+    print(f"Latency: {latency_ms:.2f} ms")
+    print(f"FPS: {fps:.2f}")
+    print(f"CPU Usage Before: {metrics['cpu_before']:.2f}%")
+    print(f"CPU Usage After: {metrics['cpu_after']:.2f}%")
+    print("\nMetrics saved to: metrics/results.csv")
+
+
+if __name__ == "__main__":
+    main()
