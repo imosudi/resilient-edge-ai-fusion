@@ -363,13 +363,10 @@ def main():
     from fusion.pipeline import FusionPipeline
 
     LOGGER.info("Loading YOLO model: %s", args.yolo_model)
-
     yolo_model = YOLO(args.yolo_model)
 
     if args.mode == "offline" and not args.lidar_log:
-        raise SystemExit(
-            "Offline mode requires --lidar-log."
-        )
+        raise SystemExit("Offline mode requires --lidar-log.")
 
     pipeline = FusionPipeline(
         camera_source="folder" if args.mode == "offline" else "camera",
@@ -394,36 +391,21 @@ def main():
 
     LOGGER.info("Starting fusion pipeline")
 
-    """results = pipeline.run_live(
-        duration=args.duration,
-        max_samples=args.max_samples,
-        display=False,
-    )"""
-
-    results = pipeline.run_live(
-    duration=args.duration,
-    max_samples=args.max_samples,
-    display=args.display,
-)
-
     frame_counter = 0
     start_time = time.time()
 
-    for item in results:
-
+    # Pass display=False — we own the window here, not the pipeline
+    for item in pipeline.run_live(
+        duration=args.duration,
+        max_samples=args.max_samples,
+        display=False,
+    ):
         frame = item.get("frame")
-
         if frame is None:
             continue
 
         inference_start = time.time()
-
-        detections = run_yolo(
-            yolo_model,
-            frame,
-            conf_threshold=args.conf_threshold,
-        )
-
+        detections = run_yolo(yolo_model, frame, conf_threshold=args.conf_threshold)
         inference_ms = (time.time() - inference_start) * 1000
 
         lidar_points = item.get("projected_lidar", [])
@@ -432,27 +414,14 @@ def main():
         frame = draw_lidar_overlay(frame, lidar_points)
 
         frame_counter += 1
-
         elapsed = time.time() - start_time
         fps = frame_counter / elapsed if elapsed > 0 else 0.0
 
-        frame = draw_metrics(
-            frame,
-            fps,
-            inference_ms,
-            args.inference_target,
-        )
+        frame = draw_metrics(frame, fps, inference_ms, args.inference_target)
 
         if args.display:
-
-            cv2.imshow(
-                "Resilient Edge AI Fusion",
-                frame,
-            )
-
-            key = cv2.waitKey(1)
-
-            if key == ord("q"):
+            cv2.imshow("Resilient Edge AI Fusion", frame)
+            if cv2.waitKey(1) == ord("q"):
                 break
 
         LOGGER.info(
@@ -464,9 +433,7 @@ def main():
         )
 
     cv2.destroyAllWindows()
-
     LOGGER.info("Fusion pipeline completed")
-
-
+    
 if __name__ == "__main__":
     main()
