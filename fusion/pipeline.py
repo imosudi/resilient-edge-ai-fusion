@@ -26,6 +26,7 @@ import cv2
 import numpy as np
 
 from fusion.confidence_fusion import adaptive_fusion
+from metrics import build_metric_record
 from fusion.hardware_config import (
     CAMERA_BACKEND_CHOICES,
     DEFAULT_CAMERA_BACKEND,
@@ -153,6 +154,9 @@ class FusionPipeline:
         min_lidar_points: int = DEFAULT_MIN_LIDAR_POINTS,
         max_sync_delta_ms: float = DEFAULT_MAX_SYNC_DELTA_MS,
         inference_target: str = "cpu",
+        run_id: str | None = None,
+        degradation: str = "clean",
+        severity: float = 0.0,
     ) -> None:
         self.camera_source = camera_source
         self.image_folder = image_folder
@@ -174,6 +178,9 @@ class FusionPipeline:
         self.min_lidar_points = min_lidar_points
         self.max_sync_delta_ms = max_sync_delta_ms
         self.inference_profile = get_inference_profile(inference_target)
+        self.run_id = run_id or f"run_{int(time.time())}"
+        self.degradation = degradation
+        self.severity = severity
         self.camera = None
         self.lidar = None
 
@@ -266,28 +273,53 @@ class FusionPipeline:
 
         fusion_result = adaptive_fusion(camera_conf, lidar_conf)
 
-        return {
-            "timestamp": max(frame["timestamp"], scan["timestamp"]),
-            "inference_target": self.inference_profile.target,
-            "inference_label": self.inference_profile.label,
-            "model_artifact": self.inference_profile.model_artifact,
-            "precision": self.inference_profile.precision,
-            "runtime": self.inference_profile.runtime,
-            "accelerator": self.inference_profile.accelerator,
-            "camera_confidence": camera_conf,
-            "lidar_confidence": lidar_conf,
-            "fused_confidence": fusion_result["fused_confidence"],
-            "camera_weight": fusion_result["camera_weight"],
-            "lidar_weight": fusion_result["lidar_weight"],
-            "dual_degraded": fusion_result["dual_degraded"],
-            "frame_source": frame.get("source"),
-            "lidar_source": scan.get("source"),
-            "camera_backend": frame.get("camera_backend"),
-            "lidar_protocol": scan.get("protocol"),
-            "lidar_points": lidar_point_count,
-            "timestamp_delta_ms": delta_ms,
-            "stale_sync": stale,
-        }
+        camera_health = "normal" if fusion_result["camera_healthy"] else "degraded"
+        lidar_health = "normal" if fusion_result["lidar_healthy"] else "degraded"
+        if stale:
+            fallback_state = "stale_sync_penalty"
+        elif fusion_result["dual_degraded"]:
+            fallback_state = "dual_degraded_fallback"
+        elif not fusion_result["camera_healthy"]:
+            fallback_state = "lidar_assisted"
+        elif not fusion_result["lidar_healthy"]:
+            fallback_state = "camera_assisted"
+        else:
+            fallback_state = "normal"
+
+        return build_metric_record(
+            run_id=self.run_id,
+            timestamp=max(frame["timestamp"], scan["timestamp"], time.time()),
+            degradation=self.degradation,
+            severity=self.severity,
+            inference_target=self.inference_profile.target,
+            camera_health=camera_health,
+            lidar_health=lidar_health,
+            stale_sync=stale,
+            latency_ms=None,
+            fps=None,
+            cpu_percent=None,
+            memory_mb=None,
+            temperature_c=None,
+            camera_confidence=camera_conf,
+            lidar_confidence=lidar_conf,
+            fusion_confidence=fusion_result["fused_confidence"],
+            fallback_state=fallback_state,
+            robustness_score=None,
+            inference_label=self.inference_profile.label,
+            model_artifact=self.inference_profile.model_artifact,
+            precision=self.inference_profile.precision,
+            runtime=self.inference_profile.runtime,
+            accelerator=self.inference_profile.accelerator,
+            camera_weight=fusion_result["camera_weight"],
+            lidar_weight=fusion_result["lidar_weight"],
+            dual_degraded=fusion_result["dual_degraded"],
+            frame_source=frame.get("source"),
+            lidar_source=scan.get("source"),
+            camera_backend=frame.get("camera_backend"),
+            lidar_protocol=scan.get("protocol"),
+            lidar_points=lidar_point_count,
+            timestamp_delta_ms=delta_ms,
+        )
 
     # ------------------------------------------------------------------
     # Offline mode

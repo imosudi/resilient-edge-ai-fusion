@@ -31,8 +31,12 @@ def test_offline_pipeline_fuses_synthetic_data():
         results = pipeline.run_offline(max_samples=2)
 
         assert len(results) == 2
+        assert all("fusion_confidence" in item for item in results)
+        assert all(0.0 <= item["fusion_confidence"] <= 1.0 for item in results)
         assert all("fused_confidence" in item for item in results)
-        assert all(0.0 <= item["fused_confidence"] <= 1.0 for item in results)
+        assert all(item["camera_health"] in {"normal", "degraded", "unknown"} for item in results)
+        assert all(item["lidar_health"] in {"normal", "degraded", "unknown"} for item in results)
+        assert all("fallback_state" in item for item in results)
         assert all(item["inference_target"] == "cpu" for item in results)
         assert all(item["model_artifact"] == "onnx" for item in results)
         assert all(item["precision"] == "FP32" for item in results)

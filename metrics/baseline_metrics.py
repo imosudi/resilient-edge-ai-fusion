@@ -13,6 +13,7 @@ from fusion.inference import (
     NPU_TARGET,
     get_inference_profile,
 )
+from metrics import build_metric_record
 
 
 latency_ms = None
@@ -51,18 +52,31 @@ def measure_yolo_baseline(
     cpu_after = psutil.cpu_percent(interval=0.1)
     inference_time = end - start
 
-    metrics = {
-        "inference_target": inference_profile.target,
-        "inference_label": inference_profile.label,
-        "model_artifact": inference_profile.model_artifact,
-        "precision": inference_profile.precision,
-        "runtime": inference_profile.runtime,
-        "accelerator": inference_profile.accelerator,
-        "latency_ms": inference_time * 1000,
-        "fps": 1 / inference_time,
-        "cpu_before": cpu_before,
-        "cpu_after": cpu_after,
-    }
+    metrics = build_metric_record(
+        run_id=f"baseline_{inference_profile.target}_{int(time.time())}",
+        timestamp=time.time(),
+        degradation="clean",
+        severity=0.0,
+        inference_target=inference_profile.target,
+        camera_health="normal",
+        lidar_health="normal",
+        stale_sync=False,
+        latency_ms=inference_time * 1000,
+        fps=1 / inference_time,
+        cpu_percent=(cpu_before + cpu_after) / 2.0,
+        memory_mb=psutil.Process().memory_info().rss / 1024**2,
+        temperature_c=None,
+        camera_confidence=None,
+        lidar_confidence=None,
+        fusion_confidence=None,
+        fallback_state="none",
+        robustness_score=None,
+        inference_label=inference_profile.label,
+        model_artifact=inference_profile.model_artifact,
+        precision=inference_profile.precision,
+        runtime=inference_profile.runtime,
+        accelerator=inference_profile.accelerator,
+    )
 
     output_path = Path(csv_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
