@@ -15,6 +15,7 @@ from fusion.hardware_config import (
     DEFAULT_HOKUYO_START_STEP,
     DEFAULT_LIDAR_END_ANGLE_DEG,
     DEFAULT_LIDAR_MAX_DISTANCE_MM,
+    DEFAULT_LIDAR_MIN_DISTANCE_MM,
     DEFAULT_LIDAR_START_ANGLE_DEG,
 )
 from fusion.pipeline import FusionPipeline
@@ -23,13 +24,13 @@ from fusion.pipeline import FusionPipeline
 def test_summarise_lidar_line_detects_nearest_object():
     summary = summarise_lidar_line(
         "0,1000,500,5000",
-        start_angle_deg=-90,
-        end_angle_deg=90,
-        min_distance_mm=20,
-        max_distance_mm=4000,
+        start_angle_deg=DEFAULT_LIDAR_START_ANGLE_DEG,
+        end_angle_deg=DEFAULT_LIDAR_END_ANGLE_DEG,
+        min_distance_mm=DEFAULT_LIDAR_MIN_DISTANCE_MM,
+        max_distance_mm=DEFAULT_LIDAR_MAX_DISTANCE_MM,
     )
 
-    assert summary["angle_range"] == (-90, 90)
+    assert summary["angle_range"] == (DEFAULT_LIDAR_START_ANGLE_DEG, DEFAULT_LIDAR_END_ANGLE_DEG)
     assert summary["sample_count"] == 4
     assert summary["valid_count"] == 2
     assert summary["object_in_range"] is True
@@ -40,8 +41,8 @@ def test_summarise_lidar_line_detects_nearest_object():
 def test_summarise_lidar_line_reports_no_object_for_invalid_ranges():
     summary = summarise_lidar_line(
         "0,10,5000",
-        min_distance_mm=20,
-        max_distance_mm=4000,
+        min_distance_mm=DEFAULT_LIDAR_MIN_DISTANCE_MM,
+        max_distance_mm=DEFAULT_LIDAR_MAX_DISTANCE_MM,
     )
 
     assert summary["object_in_range"] is False
