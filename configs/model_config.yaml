@@ -13,7 +13,7 @@ training:
   learning_rate: 0.001
   optimizer: AdamW
   early_stopping_patience: 15
-  device: cpu                  # cpu | cuda | hailo
+  device: hailo #cpu                  # cpu | cuda | hailo
 
 export:
   formats:
