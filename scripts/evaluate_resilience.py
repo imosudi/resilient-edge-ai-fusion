@@ -52,12 +52,19 @@ from fusion.inference import (
     INFERENCE_TARGET_CHOICES,
     get_inference_profile,
 )
+from fusion.pipeline import (
+    CAMERA_BACKEND_CHOICES,
+    DEFAULT_CAMERA_BACKEND,
+    DEFAULT_LIDAR_PORT,
+    DEFAULT_LIDAR_PROTOCOL,
+    LIDAR_PROTOCOL_CHOICES,
+)
 from metrics.robustness_score import robustness_score
 
 
-# -----------------------------------------------------------------------------
+# 
 # Logging
-# -----------------------------------------------------------------------------
+# 
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,9 +74,8 @@ logging.basicConfig(
 logger = logging.getLogger("evaluate_resilience")
 
 
-# -----------------------------------------------------------------------------
 # Constants
-# -----------------------------------------------------------------------------
+
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp"}
 
@@ -133,9 +139,7 @@ HARDWARE_BENCHMARK_MATRIX = [
 ]
 
 
-# -----------------------------------------------------------------------------
 # Utility Functions
-# -----------------------------------------------------------------------------
 
 def parse_csv_values(value: str, cast=str) -> list:
     return [cast(v.strip()) for v in value.split(",") if v.strip()]
@@ -315,9 +319,7 @@ def annotate_images_with_yolov8n(
     return annotations
 
 
-# -----------------------------------------------------------------------------
 # System Metrics
-# -----------------------------------------------------------------------------
 
 def read_temperature_c() -> float | None:
     thermal_path = Path("/sys/class/thermal/thermal_zone0/temp")
@@ -356,9 +358,7 @@ def read_system_metrics() -> dict:
     }
 
 
-# -----------------------------------------------------------------------------
 # Health / Fallback Logic
-# -----------------------------------------------------------------------------
 
 def health_label(confidence: float, threshold: float) -> str:
     return "normal" if confidence >= threshold else "degraded"
@@ -383,9 +383,7 @@ def fallback_state(sample: dict) -> str:
     return "dual_degraded"
 
 
-# -----------------------------------------------------------------------------
 # Image Degradation
-# -----------------------------------------------------------------------------
 
 def process_single_image(
     source_path: Path,
@@ -487,9 +485,7 @@ def prepare_image_degradation(
     return output_dir
 
 
-# -----------------------------------------------------------------------------
 # LiDAR Degradation
-# -----------------------------------------------------------------------------
 
 def prepare_lidar_degradation(
     source_log: Path,
@@ -542,9 +538,7 @@ def prepare_lidar_degradation(
     return output_log
 
 
-# -----------------------------------------------------------------------------
 # Campaign Builder
-# -----------------------------------------------------------------------------
 
 def build_campaign_inputs(
     source_images: Path,
@@ -602,15 +596,13 @@ def build_campaign_inputs(
     return image_dir, lidar_log
 
 
-# -----------------------------------------------------------------------------
 # Pipeline Campaign
-# -----------------------------------------------------------------------------
 
 def run_pipeline_campaign(
     *,
     run_id: str,
-    image_folder: Path,
-    lidar_log: Path,
+    image_folder: Path | None,
+    lidar_log: Path | None,
     inference_target: str,
     degradation: str,
     severity: float,
@@ -620,14 +612,21 @@ def run_pipeline_campaign(
     annotation_dir: Path,
     annotate_images: bool,
     yolo_model_path: str,
+    mode: str = "offline",
+    duration: float = 60.0,
+    display: bool = False,
+    camera_backend: str = DEFAULT_CAMERA_BACKEND,
+    lidar_port: str = DEFAULT_LIDAR_PORT,
+    lidar_protocol: str = DEFAULT_LIDAR_PROTOCOL,
 ) -> tuple[list[dict], dict]:
     from fusion.pipeline import FusionPipeline
 
     profile = get_inference_profile(inference_target)
 
     logger.info(
-        "Running campaign: %s | degradation=%s severity=%.2f",
+        "Running campaign: %s | mode=%s degradation=%s severity=%.2f",
         run_id,
+        mode,
         degradation,
         severity,
     )
@@ -637,13 +636,29 @@ def run_pipeline_campaign(
     start = time.perf_counter()
 
     pipeline = FusionPipeline(
-        camera_source="folder",
-        image_folder=str(image_folder),
-        lidar_log=str(lidar_log),
+        camera_source="folder" if mode == "offline" else "camera",
+        image_folder=str(image_folder) if image_folder is not None else None,
+        camera_backend=camera_backend,
+        lidar_port=lidar_port,
+        lidar_log=str(lidar_log) if lidar_log is not None else None,
+        lidar_protocol=lidar_protocol,
         inference_target=inference_target,
     )
 
-    samples = pipeline.run_offline(max_samples=max_samples)
+    if mode == "offline":
+        samples = pipeline.run_offline(max_samples=max_samples)
+    else:
+        if annotate_images:
+            logger.warning(
+                "Live mode does not support offline annotation; annotations will be skipped."
+            )
+            annotate_images = False
+
+        samples = pipeline.run_live(
+            duration=duration,
+            max_samples=max_samples,
+            display=display,
+        )
 
     elapsed = max(time.perf_counter() - start, 1e-9)
 
@@ -836,8 +851,22 @@ def main() -> int:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
+    parser.add_argument("--mode", choices=["offline", "live"], default="offline")
     parser.add_argument("--image-folder", default="dataset/images")
-    parser.add_argument("--lidar-log", required=True)
+    parser.add_argument("--lidar-log", default=None)
+    parser.add_argument("--lidar-port", default=DEFAULT_LIDAR_PORT)
+    parser.add_argument(
+        "--lidar-protocol",
+        choices=LIDAR_PROTOCOL_CHOICES,
+        default=DEFAULT_LIDAR_PROTOCOL,
+    )
+    parser.add_argument(
+        "--camera-backend",
+        choices=CAMERA_BACKEND_CHOICES,
+        default=DEFAULT_CAMERA_BACKEND,
+    )
+    parser.add_argument("--duration", type=float, default=60.0)
+    parser.add_argument("--display", action="store_true")
     parser.add_argument("--output-dir", default="exports/resilience_eval")
 
     parser.add_argument(
@@ -884,15 +913,16 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    source_images = Path(args.image_folder)
-    source_lidar_log = Path(args.lidar_log)
+    source_images = Path(args.image_folder) if args.image_folder else None
+    source_lidar_log = Path(args.lidar_log) if args.lidar_log else None
     output_dir = Path(args.output_dir)
 
-    if not source_images.exists():
-        raise SystemExit(f"Missing image folder: {source_images}")
+    if args.mode == "offline":
+        if source_images is None or not source_images.exists():
+            raise SystemExit(f"Missing image folder: {source_images}")
 
-    if not source_lidar_log.exists():
-        raise SystemExit(f"Missing LiDAR log: {source_lidar_log}")
+        if source_lidar_log is None or not source_lidar_log.exists():
+            raise SystemExit(f"Missing LiDAR log: {source_lidar_log}")
 
     inference_targets = parse_csv_values(args.inference_targets)
 
@@ -913,6 +943,14 @@ def main() -> int:
         float,
     )
 
+    if args.mode == "live":
+        if args.degradations != ",".join(DEFAULT_DEGRADATIONS) or args.severities != "0.3,0.6,0.9":
+            logger.warning(
+                "Live mode ignores degradation campaign inputs; running clean live capture only."
+            )
+        degradations = ["clean"]
+        severities = [0.0]
+
     all_rows = []
     all_summaries = []
 
@@ -922,21 +960,25 @@ def main() -> int:
 
         logger.info("Baseline campaign for %s", target)
 
-        baseline_dir = (
-            output_dir
-            / "campaign_inputs"
-            / target
-            / "clean"
-        )
+        if args.mode == "offline":
+            baseline_dir = (
+                output_dir
+                / "campaign_inputs"
+                / target
+                / "clean"
+            )
 
-        image_dir, lidar_log = build_campaign_inputs(
-            source_images,
-            source_lidar_log,
-            baseline_dir,
-            "clean",
-            0.0,
-            args.seed,
-        )
+            image_dir, lidar_log = build_campaign_inputs(
+                source_images,
+                source_lidar_log,
+                baseline_dir,
+                "clean",
+                0.0,
+                args.seed,
+            )
+        else:
+            image_dir = None
+            lidar_log = None
 
         rows, summary = run_pipeline_campaign(
             run_id=f"{target}_clean",
@@ -951,6 +993,12 @@ def main() -> int:
             annotation_dir=output_dir / "annotations" / target / "clean",
             annotate_images=not args.skip_annotation,
             yolo_model_path=args.yolo_model,
+            mode=args.mode,
+            duration=args.duration,
+            display=args.display,
+            camera_backend=args.camera_backend,
+            lidar_port=args.lidar_port,
+            lidar_protocol=args.lidar_protocol,
         )
 
         baseline_cache[target] = summary[
@@ -960,54 +1008,63 @@ def main() -> int:
         all_rows.extend(rows)
         all_summaries.append(summary)
 
-        for degradation in degradations:
+        if args.mode == "offline":
+            for degradation in degradations:
 
-            for severity in severities:
+                for severity in severities:
 
-                logger.info(
-                    "Running degradation=%s severity=%.2f",
-                    degradation,
-                    severity,
-                )
+                    logger.info(
+                        "Running degradation=%s severity=%.2f",
+                        degradation,
+                        severity,
+                    )
 
-                campaign_dir = (
-                    output_dir
-                    / "campaign_inputs"
-                    / target
-                    / f"{degradation}_{severity:.2f}".replace(".", "p")
-                )
-
-                image_dir, lidar_log = build_campaign_inputs(
-                    source_images,
-                    source_lidar_log,
-                    campaign_dir,
-                    degradation,
-                    severity,
-                    args.seed,
-                )
-
-                rows, summary = run_pipeline_campaign(
-                    run_id=f"{target}_{degradation}_{severity:.2f}".replace(".", "p"),
-                    image_folder=image_dir,
-                    lidar_log=lidar_log,
-                    inference_target=target,
-                    degradation=degradation,
-                    severity=severity,
-                    dataset_group=args.dataset_group,
-                    max_samples=args.max_samples,
-                    clean_reference_confidence=baseline_cache[target],
-                    annotation_dir=(
+                    campaign_dir = (
                         output_dir
-                        / "annotations"
+                        / "campaign_inputs"
                         / target
                         / f"{degradation}_{severity:.2f}".replace(".", "p")
-                    ),
-                    annotate_images=not args.skip_annotation,
-                    yolo_model_path=args.yolo_model,
-                )
+                    )
 
-                all_rows.extend(rows)
-                all_summaries.append(summary)
+                    image_dir, lidar_log = build_campaign_inputs(
+                        source_images,
+                        source_lidar_log,
+                        campaign_dir,
+                        degradation,
+                        severity,
+                        args.seed,
+                    )
+
+                    rows, summary = run_pipeline_campaign(
+                        run_id=f"{target}_{degradation}_{severity:.2f}".replace(".", "p"),
+                        image_folder=image_dir,
+                        lidar_log=lidar_log,
+                        inference_target=target,
+                        degradation=degradation,
+                        severity=severity,
+                        dataset_group=args.dataset_group,
+                        max_samples=args.max_samples,
+                        clean_reference_confidence=baseline_cache[target],
+                        annotation_dir=(
+                            output_dir
+                            / "annotations"
+                            / target
+                            / f"{degradation}_{severity:.2f}".replace(".", "p")
+                        ),
+                        annotate_images=not args.skip_annotation,
+                        yolo_model_path=args.yolo_model,
+                        mode=args.mode,
+                        duration=args.duration,
+                        display=args.display,
+                        camera_backend=args.camera_backend,
+                        lidar_port=args.lidar_port,
+                        lidar_protocol=args.lidar_protocol,
+                    )
+
+                    all_rows.extend(rows)
+                    all_summaries.append(summary)
+        else:
+            logger.info("Live mode skipping synthetic degradation campaign.")
 
     summary_payload = summarise_results(
         all_rows,
