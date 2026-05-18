@@ -39,6 +39,8 @@ Failure-aware edge AI perception system using Vision-LiDAR fusion on Raspberry P
 
 - YOLOv8n
 - ONNX
+- ONNX Runtime FP32 CPU baseline
+- Hailo Runtime INT8 NPU acceleration
 - OpenCV
 - NumPy
 - Ultralytics
@@ -56,6 +58,7 @@ Run the offline fusion pipeline using a local image folder and LiDAR log:
 python scripts/run_fusion.py --mode offline \
   --image-folder dataset/images \
   --lidar-log dataset/lidar.log \
+  --inference-target cpu \
   --max-samples 20
 ```
 
@@ -63,6 +66,8 @@ Important:
 - `--mode offline` runs playback mode rather than live capture.
 - `--image-folder` should point to the directory containing test frames.
 - `--lidar-log` should point to a text log file with LiDAR range lines.
+- `--inference-target cpu` records the ONNX Runtime FP32 baseline path.
+- `--inference-target npu` records the Hailo Runtime INT8 HEF path for accelerated runs.
 - `--max-samples` controls the number of fused samples produced.
 
 Note:

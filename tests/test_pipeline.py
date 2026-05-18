@@ -33,3 +33,30 @@ def test_offline_pipeline_fuses_synthetic_data():
         assert len(results) == 2
         assert all("fused_confidence" in item for item in results)
         assert all(0.0 <= item["fused_confidence"] <= 1.0 for item in results)
+        assert all(item["inference_target"] == "cpu" for item in results)
+        assert all(item["model_artifact"] == "onnx" for item in results)
+        assert all(item["precision"] == "FP32" for item in results)
+        assert all(item["runtime"] == "ONNX Runtime" for item in results)
+
+
+def test_pipeline_records_npu_inference_profile():
+    pipeline = FusionPipeline(inference_target="npu")
+
+    frame = {
+        "timestamp": 1.0,
+        "image": 255 * np.ones((64, 64, 3), dtype=np.uint8),
+        "source": "folder",
+    }
+    scan = {
+        "timestamp": 1.0,
+        "ranges": list(range(200)),
+        "source": "log",
+    }
+
+    result = pipeline.fuse_sample(frame, scan)
+
+    assert result["inference_target"] == "npu"
+    assert result["model_artifact"] == "hef"
+    assert result["precision"] == "INT8"
+    assert result["runtime"] == "Hailo Runtime"
+    assert result["accelerator"] == "Hailo-8L"

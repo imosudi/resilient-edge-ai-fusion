@@ -13,11 +13,26 @@ training:
   learning_rate: 0.001
   optimizer: AdamW
   early_stopping_patience: 15
-  device: hailo #cpu                  # cpu | cuda | hailo
+  device: cpu                  # cpu | hailo
+
+inference:
+  default_target: cpu          # cpu | npu
+  paths:
+    cpu:
+      model_artifact: onnx
+      precision: FP32
+      runtime: ONNX Runtime
+      model_path: models/exported/yolov8n.onnx
+      role: baseline
+    npu:
+      model_artifact: hef      # Hailo Executable Format
+      precision: INT8
+      runtime: Hailo Runtime
+      model_path: models/hailo/yolov8n.hef
+      role: accelerated
 
 export:
-  formats:
-    - onnx
-    - hef                      # Hailo Execution Format
-  output_dir: models/exported/
+  cpu_output_dir: models/exported/
   hailo_output_dir: models/hailo/
+  cpu_format: onnx
+  hailo_format: hef

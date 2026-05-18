@@ -25,7 +25,7 @@ from fusion.hardware_config import (
     DEFAULT_STREAM_DURATION,
     LIDAR_PROTOCOL_CHOICES,
 )
-from fusion.pipeline import FusionPipeline
+from fusion.inference import INFERENCE_TARGET_CHOICES
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger("scripts.run_fusion")
@@ -152,11 +152,22 @@ def parse_args():
         action="store_true",
         help="Show a live camera overlay with fusion confidence.",
     )
+    parser.add_argument(
+        "--inference-target",
+        choices=INFERENCE_TARGET_CHOICES,
+        default="cpu",
+        help=(
+            "Inference deployment profile to record: "
+            "cpu for ONNX Runtime FP32, npu for Hailo Runtime INT8 HEF."
+        ),
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+
+    from fusion.pipeline import FusionPipeline
 
     if args.mode == "offline" and not args.lidar_log:
         raise SystemExit(
@@ -181,18 +192,25 @@ def main():
         lidar_end_angle=args.lidar_end_angle,
         lidar_min_distance=args.lidar_min_distance,
         lidar_max_distance=args.lidar_max_distance,
+        inference_target=args.inference_target,
     )
 
     if args.mode == "offline":
-        LOGGER.info("Starting offline fusion with images=%s lidar_log=%s",
-                    args.image_folder, args.lidar_log)
+        LOGGER.info(
+            "Starting offline fusion with images=%s lidar_log=%s inference_target=%s",
+            args.image_folder,
+            args.lidar_log,
+            args.inference_target,
+        )
         results = pipeline.run_offline(max_samples=args.max_samples)
     else:
         LOGGER.info(
-            "Starting live fusion with camera_backend=%s lidar_port=%s lidar_protocol=%s",
+            "Starting live fusion with camera_backend=%s lidar_port=%s "
+            "lidar_protocol=%s inference_target=%s",
             args.camera_backend,
             args.lidar_port,
             args.lidar_protocol,
+            args.inference_target,
         )
         results = pipeline.run_live(
             duration=args.duration,

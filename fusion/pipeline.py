@@ -46,6 +46,7 @@ from fusion.hardware_config import (
     DEFAULT_STREAM_DURATION,
     LIDAR_PROTOCOL_CHOICES,
 )
+from fusion.inference import INFERENCE_TARGET_CHOICES, get_inference_profile
 from fusion.lidar import LidarCapture
 from fusion.synchronise import IncrementalSynchroniser, synchronise
 from fusion.vision import CameraCapture
@@ -151,6 +152,7 @@ class FusionPipeline:
         lidar_max_distance: float = DEFAULT_LIDAR_MAX_DISTANCE_MM,
         min_lidar_points: int = DEFAULT_MIN_LIDAR_POINTS,
         max_sync_delta_ms: float = DEFAULT_MAX_SYNC_DELTA_MS,
+        inference_target: str = "cpu",
     ) -> None:
         self.camera_source = camera_source
         self.image_folder = image_folder
@@ -171,6 +173,7 @@ class FusionPipeline:
         self.lidar_max_distance = lidar_max_distance
         self.min_lidar_points = min_lidar_points
         self.max_sync_delta_ms = max_sync_delta_ms
+        self.inference_profile = get_inference_profile(inference_target)
         self.camera = None
         self.lidar = None
 
@@ -265,6 +268,12 @@ class FusionPipeline:
 
         return {
             "timestamp": max(frame["timestamp"], scan["timestamp"]),
+            "inference_target": self.inference_profile.target,
+            "inference_label": self.inference_profile.label,
+            "model_artifact": self.inference_profile.model_artifact,
+            "precision": self.inference_profile.precision,
+            "runtime": self.inference_profile.runtime,
+            "accelerator": self.inference_profile.accelerator,
             "camera_confidence": camera_conf,
             "lidar_confidence": lidar_conf,
             "fused_confidence": fusion_result["fused_confidence"],
@@ -398,6 +407,7 @@ class FusionPipeline:
     ) -> bool:
         image = frame["image"].copy()
         lines = [
+            f"Inference: {fused['precision']} via {fused['runtime']}",
             f"Fused:  {fused['fused_confidence']:.3f}",
             f"Camera: {fused['camera_confidence']:.3f}  "
             f"w={fused.get('camera_weight', 0):.2f}",
@@ -468,6 +478,16 @@ def main() -> int:
     parser.add_argument("--duration", type=float, default=DEFAULT_STREAM_DURATION)
     parser.add_argument("--max-samples", type=int, default=DEFAULT_MAX_FUSION_SAMPLES)
     parser.add_argument("--display", action="store_true")
+    parser.add_argument(
+        "--inference-target",
+        choices=INFERENCE_TARGET_CHOICES,
+        default="cpu",
+        help=(
+            "Inference deployment profile used for result metadata: "
+            "cpu = ONNX Runtime FP32 baseline, "
+            "npu = Hailo Runtime INT8 HEF accelerated path."
+        ),
+    )
     args = parser.parse_args()
 
     pipeline = FusionPipeline(
@@ -483,6 +503,7 @@ def main() -> int:
         lidar_start_angle=args.lidar_start_angle,
         lidar_end_angle=args.lidar_end_angle,
         lidar_max_distance=args.lidar_max_distance,
+        inference_target=args.inference_target,
     )
 
     if args.mode == "offline":
