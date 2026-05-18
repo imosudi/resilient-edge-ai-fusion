@@ -56,6 +56,20 @@ dataset:
   degraded_dir: dataset/degraded/
   synchronised_dir: dataset/synchronised/
 
+benchmark_datasets:
+  coco2017:
+    name: MS COCO 2017 validation
+    images_dir: dataset/coco2017/val2017/
+    annotations: dataset/coco2017/annotations/instances_val2017.json
+    role: public_reference
+  project_specific:
+    name: Project-specific Vision-LiDAR dataset
+    images_dir: dataset/images/
+    labels_dir: dataset/labels/
+    lidar_dir: dataset/lidar/
+    synchronised_dir: dataset/synchronised/
+    role: target_domain
+
 splits:
   train: 0.70
   val: 0.15
@@ -93,12 +107,33 @@ training:
   early_stopping_patience: 15
   device: cpu                  # cpu | cuda | hailo
 
+inference:
+  default_target: cpu          # cpu | gpu | npu
+  paths:
+    cpu:
+      model_artifact: onnx
+      precision: FP32
+      runtime: ONNX Runtime
+      model_path: models/exported/yolov8n.onnx
+      role: baseline
+    gpu:
+      model_artifact: pt
+      precision: FP32
+      runtime: PyTorch CUDA
+      model_path: yolov8n.pt
+      role: comparison
+    npu:
+      model_artifact: hef      # Hailo Executable Format
+      precision: INT8
+      runtime: Hailo Runtime
+      model_path: models/hailo/yolov8n.hef
+      role: accelerated
+
 export:
-  formats:
-    - onnx
-    - hef                      # Hailo Execution Format
-  output_dir: models/exported/
+  cpu_output_dir: models/exported/
   hailo_output_dir: models/hailo/
+  cpu_format: onnx
+  hailo_format: hef
 EOF
 
 cat > "$ROOT/configs/fusion_config.yaml" << 'EOF'
@@ -227,6 +262,9 @@ All runtime behaviour is controlled through YAML files in `configs/`:
 Raspberry Pi 5 + Hailo AI HAT+ (26 TOPS).
 Benchmarking scripts compare CPU / GPU / NPU inference latency using YOLOv8n
 on MS COCO 2017 and the project-specific dataset.
+
+CPU is the ONNX Runtime FP32 baseline, GPU is an optional PyTorch CUDA FP32
+comparison profile, and NPU is the Hailo Runtime INT8 HEF deployment path.
 EOF
 
 # ─── PLACEHOLDER PYTHON MODULES ──────────────────────────────────────────────

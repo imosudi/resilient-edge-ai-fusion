@@ -13,7 +13,7 @@ The target platform is:
 - Raspberry Pi Camera Module 3
 - Hokuyo URG-04LX-UG-01 LiDAR
 
-The system combines semantic perception from camera frames, geometric spatial awareness from LiDAR scans, confidence-based fusion, adaptive fallback, and hardware-aware benchmarking. The goal is to maintain useful perception when one modality degrades, while measuring the latency, throughput, energy, and robustness trade-offs between CPU and NPU execution.
+The system combines semantic perception from camera frames, geometric spatial awareness from LiDAR scans, confidence-based fusion, adaptive fallback, and hardware-aware benchmarking. The goal is to maintain useful perception when one modality degrades, while measuring the latency, throughput, energy, and robustness trade-offs between CPU, GPU, and NPU execution. CPU and NPU are the embedded deployment paths; GPU is retained as a comparative benchmark profile for development or workstation evaluation.
 
 ## Research Objective
 
@@ -24,7 +24,7 @@ The project evaluates:
 - how object detection performance changes under controlled camera and LiDAR degradation
 - how adaptive fusion mitigates partial sensor failure
 - how fallback strategies preserve operational awareness
-- how CPU and Hailo NPU inference paths compare for latency, throughput, and energy
+- how CPU, GPU, and Hailo NPU inference paths compare for latency, throughput, and energy
 - whether the system remains viable within embedded compute, memory, power, and thermal constraints
 
 ## Reference Architecture
@@ -36,19 +36,20 @@ The architecture follows a structured data flow:
 ```text
 Sensor acquisition
 -> Pre-processing and synchronisation
--> Model preparation for CPU/NPU execution
+-> Model preparation for CPU/GPU/NPU execution
 -> Inference
 -> Post-processing and fusion
 -> Fallback decision logic
 -> Metrics logging and robustness evaluation
 ```
 
-The CPU and NPU paths must be defined before inference:
+The CPU, GPU, and NPU paths must be defined before inference:
 
 - **CPU baseline path:** YOLOv8n is exported to ONNX and executed with ONNX Runtime using FP32 precision.
+- **GPU comparison path:** YOLOv8n is executed with PyTorch/Ultralytics on CUDA using FP32 precision for comparative benchmarking.
 - **NPU accelerated path:** YOLOv8n is quantised to INT8 using the Hailo toolchain and compiled into Hailo Executable Format (HEF) for execution with the Hailo runtime.
 
-This distinction is important because the two paths are not interchangeable runtime choices over the same artefact. They require different model formats, precision targets, execution providers, and deployment checks.
+This distinction is important because the paths are not interchangeable runtime choices over the same artefact. They require different model formats, precision targets, execution providers, and deployment checks.
 
 ## System Components
 
@@ -108,18 +109,20 @@ This distinction is important because the two paths are not interchangeable runt
 | Path | Model artefact | Precision | Runtime | Role |
 | --- | --- | --- | --- | --- |
 | CPU baseline | ONNX | FP32 | ONNX Runtime | Accuracy and latency baseline |
+| GPU comparison | PT | FP32 | PyTorch CUDA | Comparative benchmark on CUDA-capable systems |
 | NPU accelerated | HEF | INT8 | Hailo Runtime | Hardware-accelerated embedded inference |
 
-The CPU path should be used to validate model behaviour independently of the accelerator. The NPU path should be used to measure acceleration benefits and deployment constraints after quantisation and compilation.
+The CPU path should be used to validate model behaviour independently of the accelerator. The GPU path provides a comparative latency reference where CUDA is available. The NPU path should be used to measure embedded acceleration benefits and deployment constraints after quantisation and compilation.
 
 Required preparation steps:
 
 - export YOLOv8n to ONNX for CPU inference
 - validate ONNX output shape and confidence behaviour
+- run CUDA-based GPU comparison where a suitable GPU is available
 - quantise the model to INT8 for Hailo deployment
 - compile the quantised model to HEF
 - validate Hailo runtime execution on the Raspberry Pi 5 + Hailo AI HAT+
-- keep CPU and NPU metrics separate in logs
+- keep CPU, GPU, and NPU metrics separate in logs
 
 ### 5. Inference and Post-processing
 
@@ -158,7 +161,7 @@ The implementation should record whether each result came from CPU or NPU execut
 
 ![Benchmarking framework](images/edge_ai_metrics_hub.svg)
 
-**Purpose:** quantify resilience under degraded sensing conditions and compare CPU/NPU deployment behaviour.
+**Purpose:** quantify resilience under degraded sensing conditions and compare CPU/GPU/NPU deployment behaviour.
 
 | Degradation | Purpose |
 | --- | --- |
@@ -170,6 +173,11 @@ The implementation should record whether each result came from CPU or NPU execut
 | Temporal desynchronisation | Simulates camera-LiDAR timing mismatch |
 
 The evaluation should include clean baseline runs and degraded runs. Each run should identify the active degradation, severity level, inference path, and fallback state.
+
+Benchmarking should be run against two dataset groups:
+
+- **MS COCO 2017 validation:** public reference dataset for standard YOLOv8n object-detection comparison.
+- **Project-specific Vision-LiDAR dataset:** target-domain data containing camera frames, labels, LiDAR scans, and synchronised multimodal samples.
 
 ## Metrics
 
@@ -191,6 +199,7 @@ The project should record both performance and robustness metrics.
 Metric logs should distinguish:
 
 - CPU FP32 ONNX inference
+- GPU FP32 CUDA inference
 - NPU INT8 Hailo inference
 - clean sensor operation
 - degraded camera operation
@@ -214,12 +223,29 @@ Metric logs should distinguish:
 ## Implementation Priorities
 
 1. Validate the offline pipeline with known camera frames and LiDAR logs.
-2. Keep CPU and NPU model preparation explicit and separately measurable.
+2. Keep CPU, GPU, and NPU model preparation explicit and separately measurable.
 3. Establish clean baseline metrics before applying degradations.
 4. Add one degradation type at a time and verify the fusion response.
 5. Log modality health, fallback state, inference path, latency, and confidence for every run.
-6. Compare robustness and efficiency across CPU baseline and Hailo-accelerated execution.
+6. Compare robustness and efficiency across CPU baseline, GPU comparison, and Hailo-accelerated execution.
+
+## Current Project Stage Review
+
+The current project stage is **Stage 10 — Real-Time Embedded Deployment: Prototype Complete**, with an important qualification: the real-time software path exists, but final embedded validation on Raspberry Pi 5 + Hailo AI HAT+ is still pending.
+
+| Stage | Confirmed Status | Evidence | Next Gate |
+| --- | --- | --- | --- |
+| Stage 1 — Environment Setup | Baseline Complete | Repository structure, requirements, configuration files, scaffold script, tests, and project documentation are present. | Reproduce setup on the target Raspberry Pi 5 environment. |
+| Stage 2 — Vision Inference Baseline | Prototype Complete | YOLOv8n weights, camera capture helpers, YOLO smoke test, baseline metric script, and CPU inference metadata exist. | Validate repeatable ONNX Runtime FP32 inference and record clean baseline results. |
+| Stage 3 — LiDAR Acquisition Pipeline | Baseline Complete | LiDAR serial capture, Hokuyo SCIP handling, offline logs, range parsing, projection, and LiDAR tests are present. | Confirm stable live acquisition from Hokuyo URG-04LX-UG-01 on the target device. |
+| Stage 4 — Sensor Synchronisation | Prototype Complete | Timestamp nearest-neighbour synchronisation and incremental live synchroniser are implemented and tested. | Validate camera-LiDAR timing under live sensor load. |
+| Stage 5 — Controlled Degradation Framework | Initial Prototype Complete | Image and LiDAR degradation scripts exist for noise, blur, low-light, occlusion, fog, overexposure, dropout, and desynchronisation. | Add a unified experiment runner that applies degradations with severity metadata. |
+| Stage 6 — Adaptive Fusion Engine | Initial Prototype Complete | Confidence-based adaptive fusion, modality weighting, degraded-sensor handling, and pipeline integration exist. | Validate fusion behaviour against controlled degraded datasets. |
+| Stage 7 — Robustness Benchmarking | Initial Prototype Complete | Robustness score, baseline metrics, results CSV, and CPU/GPU/NPU metric fields exist. | Expand metrics to include mAP, latency percentiles, power, energy per inference, and recovery behaviour. |
+| Stage 8 — ONNX Deployment Pathway | Initialised | ONNX export script, ONNX inspection script, CPU inference profile, and ONNX Runtime metadata are present. | Export and validate the ONNX artefact end-to-end with real inference outputs. |
+| Stage 9 — Hailo Optimisation | Not Started | NPU profile and HEF target metadata exist, but no Hailo Dataflow Compiler flow or Hailo runtime execution is implemented yet. | Quantise YOLOv8n to INT8, compile to HEF, and run inference through Hailo Runtime. |
+| Stage 10 — Real-Time Embedded Deployment | Prototype Complete | Live camera, live LiDAR, synchronised fusion pipeline, display overlay, and `--inference-target` runtime metadata are implemented. | Run sustained real-time tests on Raspberry Pi 5 with Hailo AI HAT+, logging latency, thermals, and power. |
 
 ## Expected Outcome
 
-The expected outcome is a practical framework for resilient AIoT perception that demonstrates how Vision-LiDAR fusion and adaptive fallback can maintain useful detection behaviour under partial sensor failure. The project should also quantify whether Hailo NPU acceleration improves real-time viability and energy efficiency compared with the CPU baseline on Raspberry Pi 5.
+The expected outcome is a practical framework for resilient AIoT perception that demonstrates how Vision-LiDAR fusion and adaptive fallback can maintain useful detection behaviour under partial sensor failure. The project should also quantify whether Hailo NPU acceleration improves real-time viability and energy efficiency compared with the CPU baseline on Raspberry Pi 5, with GPU results used as a comparative benchmark where available.

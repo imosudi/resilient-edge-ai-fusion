@@ -13,10 +13,10 @@ training:
   learning_rate: 0.001
   optimizer: AdamW
   early_stopping_patience: 15
-  device: cpu                  # cpu | hailo
+  device: cpu                  # cpu | cuda | hailo
 
 inference:
-  default_target: cpu          # cpu | npu
+  default_target: cpu          # cpu | gpu | npu
   paths:
     cpu:
       model_artifact: onnx
@@ -24,6 +24,12 @@ inference:
       runtime: ONNX Runtime
       model_path: models/exported/yolov8n.onnx
       role: baseline
+    gpu:
+      model_artifact: pt
+      precision: FP32
+      runtime: PyTorch CUDA
+      model_path: yolov8n.pt
+      role: comparison
     npu:
       model_artifact: hef      # Hailo Executable Format
       precision: INT8

@@ -8,7 +8,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from fusion.inference import (
     CPU_TARGET,
+    GPU_TARGET,
     INFERENCE_TARGET_CHOICES,
+    NPU_TARGET,
     get_inference_profile,
 )
 
@@ -29,13 +31,21 @@ def measure_yolo_baseline(
     from ultralytics import YOLO
 
     inference_profile = get_inference_profile(inference_target)
+    if inference_profile.target == NPU_TARGET:
+        raise NotImplementedError(
+            "NPU benchmarking requires a compiled HEF model and Hailo Runtime. "
+            "Use this helper for CPU/GPU YOLO baselines, then record Hailo "
+            "measurements from the Hailo runtime path once Stage 9 is complete."
+        )
+
+    yolo_device = "cuda" if inference_profile.target == GPU_TARGET else "cpu"
     model = YOLO(model_path)
-    model(image_path)
+    model(image_path, device=yolo_device)
 
     cpu_before = psutil.cpu_percent(interval=0.1)
 
     start = time.time()
-    model(image_path)
+    model(image_path, device=yolo_device)
     end = time.time()
 
     cpu_after = psutil.cpu_percent(interval=0.1)
@@ -84,7 +94,8 @@ def main():
         default=CPU_TARGET,
         help=(
             "Deployment profile recorded with the metrics. "
-            "Use cpu for ONNX/FP32 baseline or npu for Hailo/INT8 HEF runs."
+            "Use cpu for ONNX/FP32 baseline, gpu for CUDA comparison, "
+            "or npu for Hailo/INT8 HEF runs."
         ),
     )
     args = parser.parse_args()

@@ -485,6 +485,7 @@ def main() -> int:
         help=(
             "Inference deployment profile used for result metadata: "
             "cpu = ONNX Runtime FP32 baseline, "
+            "gpu = CUDA FP32 comparison, "
             "npu = Hailo Runtime INT8 HEF accelerated path."
         ),
     )

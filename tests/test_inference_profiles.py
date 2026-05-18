@@ -21,6 +21,21 @@ def test_npu_inference_profile_describes_hailo_int8_hef_path():
     assert profile.runtime == "Hailo Runtime"
 
 
+def test_gpu_inference_profile_describes_cuda_fp32_comparison():
+    profile = get_inference_profile("gpu")
+
+    assert profile.target == "gpu"
+    assert profile.model_artifact == "pt"
+    assert profile.precision == "FP32"
+    assert profile.runtime == "PyTorch CUDA"
+
+
+def test_cuda_alias_maps_to_gpu_profile():
+    profile = get_inference_profile("cuda")
+
+    assert profile.target == "gpu"
+
+
 def test_hailo_alias_maps_to_npu_profile():
     profile = get_inference_profile("hailo")
 
@@ -29,4 +44,4 @@ def test_hailo_alias_maps_to_npu_profile():
 
 def test_unknown_inference_profile_is_rejected():
     with pytest.raises(ValueError):
-        get_inference_profile("gpu")
+        get_inference_profile("tpu")

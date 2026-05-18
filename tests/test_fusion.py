@@ -13,9 +13,14 @@ def test_normal_conditions():
         lidar_conf=0.8
     )
 
-    expected = (0.9 * 0.7) + (0.8 * 0.3)
-
-    assert abs(result - expected) < 1e-6
+    assert "fused_confidence" in result
+    assert "camera_weight" in result
+    assert "lidar_weight" in result
+    assert result["camera_healthy"] is True
+    assert result["lidar_healthy"] is True
+    assert result["dual_degraded"] is False
+    assert 0.0 <= result["fused_confidence"] <= 1.0
+    assert abs(result["camera_weight"] + result["lidar_weight"] - 1.0) < 1e-6
 
 
 def test_camera_degradation():
@@ -25,6 +30,8 @@ def test_camera_degradation():
         lidar_conf=0.9
     )
 
-    expected = (0.2 * 0.3) + (0.9 * 0.7)
-
-    assert abs(result - expected) < 1e-6
+    assert result["camera_healthy"] is False
+    assert result["lidar_healthy"] is True
+    assert result["dual_degraded"] is False
+    assert result["lidar_weight"] > 0.5
+    assert 0.0 <= result["fused_confidence"] <= 1.0

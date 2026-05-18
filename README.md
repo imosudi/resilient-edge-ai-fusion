@@ -13,6 +13,8 @@
 
 Failure-aware edge AI perception system using Vision-LiDAR fusion on Raspberry Pi 5 and Hailo-8L for resilient real-time object detection under degraded sensing conditions.
 
+Benchmarking compares CPU, GPU, and NPU inference latency using YOLOv8n on MS COCO 2017 and the project-specific Vision-LiDAR dataset.
+
 
 
 ## Research Objectives
@@ -40,6 +42,7 @@ Failure-aware edge AI perception system using Vision-LiDAR fusion on Raspberry P
 - YOLOv8n
 - ONNX
 - ONNX Runtime FP32 CPU baseline
+- PyTorch CUDA FP32 GPU comparison
 - Hailo Runtime INT8 NPU acceleration
 - OpenCV
 - NumPy
@@ -67,6 +70,7 @@ Important:
 - `--image-folder` should point to the directory containing test frames.
 - `--lidar-log` should point to a text log file with LiDAR range lines.
 - `--inference-target cpu` records the ONNX Runtime FP32 baseline path.
+- `--inference-target gpu` records the PyTorch CUDA FP32 comparison path.
 - `--inference-target npu` records the Hailo Runtime INT8 HEF path for accelerated runs.
 - `--max-samples` controls the number of fused samples produced.
 

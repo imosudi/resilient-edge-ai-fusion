@@ -60,3 +60,26 @@ def test_pipeline_records_npu_inference_profile():
     assert result["precision"] == "INT8"
     assert result["runtime"] == "Hailo Runtime"
     assert result["accelerator"] == "Hailo-8L"
+
+
+def test_pipeline_records_gpu_inference_profile():
+    pipeline = FusionPipeline(inference_target="gpu")
+
+    frame = {
+        "timestamp": 1.0,
+        "image": 255 * np.ones((64, 64, 3), dtype=np.uint8),
+        "source": "folder",
+    }
+    scan = {
+        "timestamp": 1.0,
+        "ranges": list(range(200)),
+        "source": "log",
+    }
+
+    result = pipeline.fuse_sample(frame, scan)
+
+    assert result["inference_target"] == "gpu"
+    assert result["model_artifact"] == "pt"
+    assert result["precision"] == "FP32"
+    assert result["runtime"] == "PyTorch CUDA"
+    assert result["accelerator"] == "CUDA GPU"

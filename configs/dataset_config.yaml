@@ -9,6 +9,20 @@ dataset:
   degraded_dir: dataset/degraded/
   synchronised_dir: dataset/synchronised/
 
+benchmark_datasets:
+  coco2017:
+    name: MS COCO 2017 validation
+    images_dir: dataset/coco2017/val2017/
+    annotations: dataset/coco2017/annotations/instances_val2017.json
+    role: public_reference
+  project_specific:
+    name: Project-specific Vision-LiDAR dataset
+    images_dir: dataset/images/
+    labels_dir: dataset/labels/
+    lidar_dir: dataset/lidar/
+    synchronised_dir: dataset/synchronised/
+    role: target_domain
+
 splits:
   train: 0.70
   val: 0.15

@@ -158,7 +158,8 @@ def parse_args():
         default="cpu",
         help=(
             "Inference deployment profile to record: "
-            "cpu for ONNX Runtime FP32, npu for Hailo Runtime INT8 HEF."
+            "cpu for ONNX Runtime FP32, gpu for CUDA FP32 comparison, "
+            "npu for Hailo Runtime INT8 HEF."
         ),
     )
     return parser.parse_args()
