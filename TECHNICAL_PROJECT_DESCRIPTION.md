@@ -206,6 +206,76 @@ Metric logs should distinguish:
 - degraded LiDAR operation
 - combined or synchronisation-related failures
 
+## Master Evaluation Orchestration
+
+Structured resilience evaluation is handled by `scripts/evaluate_resilience.py`. This script operates above the live/offline fusion pipeline and is responsible for reproducible benchmark campaigns rather than sensor acquisition itself.
+
+The evaluator performs:
+
+- clean baseline execution
+- deterministic degradation campaign generation
+- CPU/GPU/NPU comparison runs through the shared inference-target metadata
+- per-sample metric collection using a unified schema
+- baseline-vs-degraded robustness comparison
+- recovery-state validation through a final clean recovery run
+- CSV and JSON reporting
+- separate hardware benchmark matrix export
+
+Example:
+
+```bash
+python scripts/evaluate_resilience.py \
+  --image-folder dataset/images \
+  --lidar-log dataset/lidar.log \
+  --inference-targets cpu,gpu,npu \
+  --degradations low_light,motion_blur,gaussian_noise,occlusion,lidar_dropout,temporal_desync \
+  --severities 0.3,0.6,0.9 \
+  --max-samples 20 \
+  --output-dir exports/resilience_eval
+```
+
+Primary outputs:
+
+| Output | Purpose |
+| --- | --- |
+| `resilience_metrics.csv` | Flat per-sample metric rows for analysis in spreadsheets or pandas |
+| `resilience_metrics.json` | Full per-sample metric records |
+| `resilience_summary.json` | Statistical campaign summary and baseline-vs-degraded comparison |
+| `hardware_benchmark_matrix.json` | Separate CPU/GPU/NPU runtime matrix |
+
+Unified metric rows include:
+
+```json
+{
+  "run_id": "cpu_low_light_0p60_001",
+  "timestamp": 1779125682.05,
+  "degradation": "low_light",
+  "severity": 0.6,
+  "inference_target": "cpu",
+  "camera_health": "degraded",
+  "lidar_health": "normal",
+  "stale_sync": false,
+  "latency_ms": 87.3,
+  "fps": 11.4,
+  "cpu_percent": 73.1,
+  "memory_mb": 812.0,
+  "temperature_c": 64.2,
+  "camera_confidence": 0.46,
+  "lidar_confidence": 0.66,
+  "fusion_confidence": 0.52,
+  "fallback_state": "lidar_assisted",
+  "robustness_score": 81.4
+}
+```
+
+The hardware benchmark matrix remains separate from per-run metrics:
+
+| Inference Path | Runtime |
+| --- | --- |
+| CPU FP32 | ONNX Runtime |
+| GPU FP32 | CUDA |
+| NPU INT8 | Hailo Runtime |
+
 ## Repository Mapping
 
 | Area | Current location |

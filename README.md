@@ -74,5 +74,20 @@ Important:
 - `--inference-target npu` records the Hailo Runtime INT8 HEF path for accelerated runs.
 - `--max-samples` controls the number of fused samples produced.
 
+## Resilience Evaluation
+
+Run a reproducible clean-vs-degraded benchmark campaign:
+
+```bash
+python scripts/evaluate_resilience.py \
+  --image-folder dataset/images \
+  --lidar-log dataset/lidar.log \
+  --inference-targets cpu,gpu,npu \
+  --severities 0.3,0.6,0.9 \
+  --output-dir exports/resilience_eval
+```
+
+The evaluator writes per-sample CSV/JSON metrics, a statistical summary, and a separate CPU/GPU/NPU hardware benchmark matrix.
+
 Note:
 sudo apt install fonts-dejavu-core
