@@ -24,6 +24,12 @@ def test_unified_metric_schema_contains_required_fields():
         "fusion_confidence",
         "fallback_state",
         "robustness_score",
+        "object_count",
+        "detected_objects",
+        "detection_confidences",
+        "object_distances_mm",
+        "nearest_object_distance_mm",
+        "annotation_path",
     }
 
     assert required_fields.issubset(set(METRIC_FIELDS))

@@ -40,7 +40,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Iterable
 
-import cv2
 import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -54,12 +53,6 @@ from fusion.inference import (
     get_inference_profile,
 )
 from metrics.robustness_score import robustness_score
-from fusion.pipeline import FusionPipeline
-
-from preprocessing.degradations.gaussian_noise import apply_gaussian_noise
-from preprocessing.degradations.generate_low_light import apply_low_light
-from preprocessing.degradations.generate_motion_blur import apply_motion_blur
-from preprocessing.degradations.occlusion import apply_occlusion
 
 
 # -----------------------------------------------------------------------------
@@ -113,6 +106,12 @@ METRIC_FIELDS = (
     "fallback_state",
     "robustness_score",
     "recovery_state",
+    "object_count",
+    "detected_objects",
+    "detection_confidences",
+    "object_distances_mm",
+    "nearest_object_distance_mm",
+    "annotation_path",
 )
 
 HARDWARE_BENCHMARK_MATRIX = [
@@ -181,6 +180,139 @@ def count_values(values: Iterable[str]) -> dict:
         counts[value] = counts.get(value, 0) + 1
 
     return counts
+
+
+def yolo_device_for_target(inference_target: str) -> str:
+    if inference_target == "gpu":
+        return "cuda"
+    return "cpu"
+
+
+def read_lidar_ranges(lidar_log: Path, max_scans: int) -> list[list[float]]:
+    scans = []
+    with open(lidar_log, "r", encoding="utf-8") as stream:
+        for line in stream:
+            if len(scans) >= max_scans:
+                break
+
+            values = []
+            for value in line.strip().split(","):
+                try:
+                    values.append(float(value))
+                except ValueError:
+                    continue
+
+            scans.append(values)
+
+    return scans
+
+
+def estimate_box_distance_mm(
+    box_xyxy,
+    image_width: int,
+    ranges_mm: list[float],
+) -> float | None:
+    from fusion.hardware_config import (
+        DEFAULT_LIDAR_MAX_DISTANCE_MM,
+        DEFAULT_LIDAR_MIN_DISTANCE_MM,
+    )
+
+    if not ranges_mm or image_width <= 0:
+        return None
+
+    x1, _, x2, _ = [float(value) for value in box_xyxy]
+    start_ratio = max(0.0, min(1.0, x1 / image_width))
+    end_ratio = max(0.0, min(1.0, x2 / image_width))
+
+    if end_ratio < start_ratio:
+        start_ratio, end_ratio = end_ratio, start_ratio
+
+    start_index = int(start_ratio * (len(ranges_mm) - 1))
+    end_index = int(end_ratio * (len(ranges_mm) - 1))
+    end_index = max(start_index, end_index)
+
+    candidates = [
+        value
+        for value in ranges_mm[start_index:end_index + 1]
+        if (
+            np.isfinite(value)
+            and DEFAULT_LIDAR_MIN_DISTANCE_MM <= value <= DEFAULT_LIDAR_MAX_DISTANCE_MM
+        )
+    ]
+    if not candidates:
+        return None
+
+    return round(float(min(candidates)), 3)
+
+
+def annotate_images_with_yolov8n(
+    image_folder: Path,
+    lidar_log: Path,
+    annotation_dir: Path,
+    model_path: str,
+    inference_target: str,
+    max_images: int,
+) -> list[dict]:
+    import cv2
+    from ultralytics import YOLO
+
+    annotation_dir.mkdir(parents=True, exist_ok=True)
+    model = YOLO(model_path)
+    device = yolo_device_for_target(inference_target)
+    lidar_scans = read_lidar_ranges(lidar_log, max_images)
+
+    annotations = []
+    for image_index, image_path in enumerate(image_paths(image_folder)[:max_images]):
+        results = model(str(image_path), device=device, verbose=False)
+        result = results[0]
+        annotated_image = result.plot()
+        annotation_path = annotation_dir / image_path.name
+        image_height, image_width = result.orig_shape
+
+        if not cv2.imwrite(str(annotation_path), annotated_image):
+            raise RuntimeError(f"Failed to save annotated image: {annotation_path}")
+
+        labels = []
+        confidences = []
+        distances_mm = []
+        boxes_xyxy = []
+        scan_ranges = lidar_scans[image_index] if image_index < len(lidar_scans) else []
+        if result.boxes is not None:
+            for box in result.boxes:
+                class_id = int(box.cls[0])
+                xyxy = [round(float(value), 3) for value in box.xyxy[0].tolist()]
+                labels.append(result.names[class_id])
+                confidences.append(round(float(box.conf[0]), 6))
+                boxes_xyxy.append(xyxy)
+                distance_mm = estimate_box_distance_mm(
+                    xyxy,
+                    image_width=image_width,
+                    ranges_mm=scan_ranges,
+                )
+                distances_mm.append(distance_mm)
+
+        annotations.append(
+            {
+                "image_path": str(image_path),
+                "annotation_path": str(annotation_path),
+                "object_count": len(labels),
+                "detected_objects": labels,
+                "detection_confidences": confidences,
+                "boxes_xyxy": boxes_xyxy,
+                "object_distances_mm": distances_mm,
+                "nearest_object_distance_mm": min(
+                    [distance for distance in distances_mm if distance is not None],
+                    default=None,
+                ),
+                "distance_estimation": (
+                    "Approximate: detection box horizontal span mapped to "
+                    "the paired LiDAR scan angular bins."
+                ),
+            }
+        )
+
+    write_json(annotation_dir / "detections.json", annotations)
+    return annotations
 
 
 # -----------------------------------------------------------------------------
@@ -262,6 +394,12 @@ def process_single_image(
     severity: float,
     seed: int,
 ) -> None:
+    import cv2
+
+    from preprocessing.degradations.gaussian_noise import apply_gaussian_noise
+    from preprocessing.degradations.generate_low_light import apply_low_light
+    from preprocessing.degradations.generate_motion_blur import apply_motion_blur
+    from preprocessing.degradations.occlusion import apply_occlusion
 
     image = cv2.imread(str(source_path))
 
@@ -479,7 +617,11 @@ def run_pipeline_campaign(
     dataset_group: str,
     max_samples: int,
     clean_reference_confidence: float | None,
+    annotation_dir: Path,
+    annotate_images: bool,
+    yolo_model_path: str,
 ) -> tuple[list[dict], dict]:
+    from fusion.pipeline import FusionPipeline
 
     profile = get_inference_profile(inference_target)
 
@@ -506,6 +648,16 @@ def run_pipeline_campaign(
     elapsed = max(time.perf_counter() - start, 1e-9)
 
     resource_after = read_system_metrics()
+    annotations = []
+    if annotate_images:
+        annotations = annotate_images_with_yolov8n(
+            image_folder=image_folder,
+            lidar_log=lidar_log,
+            annotation_dir=annotation_dir,
+            model_path=yolo_model_path,
+            inference_target=inference_target,
+            max_images=max_samples,
+        )
 
     latency_ms = (elapsed / max(1, len(samples))) * 1000.0
     fps = len(samples) / elapsed
@@ -515,6 +667,7 @@ def run_pipeline_campaign(
     for index, sample in enumerate(samples, start=1):
 
         fusion_confidence = sample["fused_confidence"]
+        annotation = annotations[index - 1] if index <= len(annotations) else {}
 
         score = (
             robustness_score(
@@ -564,6 +717,17 @@ def run_pipeline_campaign(
             "fallback_state": fallback_state(sample),
             "robustness_score": round(score, 3),
             "recovery_state": "not_applicable",
+            "object_count": annotation.get("object_count", 0),
+            "detected_objects": "|".join(annotation.get("detected_objects", [])),
+            "detection_confidences": "|".join(
+                str(value) for value in annotation.get("detection_confidences", [])
+            ),
+            "object_distances_mm": "|".join(
+                "" if value is None else str(value)
+                for value in annotation.get("object_distances_mm", [])
+            ),
+            "nearest_object_distance_mm": annotation.get("nearest_object_distance_mm"),
+            "annotation_path": annotation.get("annotation_path"),
         })
 
     summary = {
@@ -582,6 +746,13 @@ def run_pipeline_campaign(
         "fallback_counts": count_values(
             row["fallback_state"] for row in rows
         ),
+        "object_count_mean": mean(
+            row["object_count"] for row in rows
+        ),
+        "nearest_object_distance_mm_mean": mean(
+            row["nearest_object_distance_mm"] for row in rows
+        ),
+        "annotation_dir": str(annotation_dir) if annotate_images else None,
         "resource_before": resource_before,
         "resource_after": resource_after,
     }
@@ -638,6 +809,12 @@ def summarise_results(
             "fallback_counts": count_values(
                 r["fallback_state"] for r in group_rows
             ),
+            "object_count_mean": mean(
+                r["object_count"] for r in group_rows
+            ),
+            "nearest_object_distance_mm_mean": mean(
+                r["nearest_object_distance_mm"] for r in group_rows
+            ),
         })
 
     return {
@@ -693,6 +870,16 @@ def main() -> int:
         "--seed",
         type=int,
         default=42,
+    )
+    parser.add_argument(
+        "--yolo-model",
+        default="yolov8n.pt",
+        help="YOLOv8n model path used for object identification and annotation.",
+    )
+    parser.add_argument(
+        "--skip-annotation",
+        action="store_true",
+        help="Disable YOLO image object identification and annotated image export.",
     )
 
     args = parser.parse_args()
@@ -761,6 +948,9 @@ def main() -> int:
             dataset_group=args.dataset_group,
             max_samples=args.max_samples,
             clean_reference_confidence=None,
+            annotation_dir=output_dir / "annotations" / target / "clean",
+            annotate_images=not args.skip_annotation,
+            yolo_model_path=args.yolo_model,
         )
 
         baseline_cache[target] = summary[
@@ -806,6 +996,14 @@ def main() -> int:
                     dataset_group=args.dataset_group,
                     max_samples=args.max_samples,
                     clean_reference_confidence=baseline_cache[target],
+                    annotation_dir=(
+                        output_dir
+                        / "annotations"
+                        / target
+                        / f"{degradation}_{severity:.2f}".replace(".", "p")
+                    ),
+                    annotate_images=not args.skip_annotation,
+                    yolo_model_path=args.yolo_model,
                 )
 
                 all_rows.extend(rows)
