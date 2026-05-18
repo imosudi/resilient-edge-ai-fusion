@@ -64,79 +64,92 @@ def capture_lidar_lines(
     min_distance_mm=DEFAULT_LIDAR_MIN_DISTANCE_MM,
     max_distance_mm=DEFAULT_LIDAR_MAX_DISTANCE_MM,
     show_window=False,
+    output_path=None,
     protocol=DEFAULT_LIDAR_PROTOCOL,
     hokuyo_start_step=DEFAULT_HOKUYO_START_STEP,
     hokuyo_end_step=DEFAULT_HOKUYO_END_STEP,
     hokuyo_cluster_count=DEFAULT_HOKUYO_CLUSTER_COUNT,
 ):
     serial_port = open_serial_port(port=port, baudrate=baudrate, timeout=timeout)
+    output_file = None
+    if output_path is not None:
+        output_file = open(output_path, 'w', encoding='utf-8')
 
     empty_reads = 0
     captured_lines = 0
     start_time = time.time()
 
-    with serial_port:
-        print("LiDAR connected successfully")
-        if protocol == "hokuyo":
-            initialise_hokuyo(serial_port)
+    try:
+        with serial_port:
+            print('LiDAR connected successfully')
+            if protocol == 'hokuyo':
+                initialise_hokuyo(serial_port)
 
-        while True:
-            if duration is not None and time.time() - start_time >= duration:
-                print(
-                    "LiDAR stream test completed: "
-                    f"captured {captured_lines} line(s) in {duration:.1f} second(s)"
-                )
-                return captured_lines
+            while True:
+                if duration is not None and time.time() - start_time >= duration:
+                    print(
+                        'LiDAR stream test completed: '
+                        f'captured {captured_lines} line(s) in {duration:.1f} second(s)'
+                    )
+                    return captured_lines
 
-            if protocol == "hokuyo":
-                ranges = request_hokuyo_scan(
-                    serial_port,
-                    start_step=hokuyo_start_step,
-                    end_step=hokuyo_end_step,
-                    cluster_count=hokuyo_cluster_count,
-                )
-                line = "" if ranges is None else ",".join(str(value) for value in ranges)
-            else:
-                line = serial_port.readline().decode(errors="ignore").strip()
+                if protocol == 'hokuyo':
+                    ranges = request_hokuyo_scan(
+                        serial_port,
+                        start_step=hokuyo_start_step,
+                        end_step=hokuyo_end_step,
+                        cluster_count=hokuyo_cluster_count,
+                    )
+                    line = '' if ranges is None else ','.join(str(value) for value in ranges)
+                else:
+                    line = serial_port.readline().decode(errors='ignore').strip()
 
-            if line:
-                empty_reads = 0
-                captured_lines += 1
-                timestamp = time.time()
-                print(f"[{timestamp}] {line}")
-                print_lidar_sample_summary(
-                    line=line,
-                    start_angle_deg=start_angle_deg,
-                    end_angle_deg=end_angle_deg,
-                    min_distance_mm=min_distance_mm,
-                    max_distance_mm=max_distance_mm,
-                )
-                if show_window:
-                    should_continue = show_lidar_window(
+                if line:
+                    empty_reads = 0
+                    captured_lines += 1
+                    timestamp = time.time()
+                    print(f'[{timestamp}] {line}')
+                    print_lidar_sample_summary(
                         line=line,
                         start_angle_deg=start_angle_deg,
                         end_angle_deg=end_angle_deg,
                         min_distance_mm=min_distance_mm,
                         max_distance_mm=max_distance_mm,
-                        wait_ms=1 if max_lines is None else 0,
                     )
-                    if not should_continue:
-                        print("LiDAR display stopped")
+                    if output_file is not None:
+                        output_file.write(line + '\n')
+                        output_file.flush()
+                        output_file.flush()
+
+                    if show_window:
+                        should_continue = show_lidar_window(
+                            line=line,
+                            start_angle_deg=start_angle_deg,
+                            end_angle_deg=end_angle_deg,
+                            min_distance_mm=min_distance_mm,
+                            max_distance_mm=max_distance_mm,
+                            wait_ms=1 if max_lines is None else 0,
+                        )
+                        if not should_continue:
+                            print('LiDAR display stopped')
+                            return captured_lines
+
+                    if max_lines is not None and captured_lines >= max_lines:
+                        print(f'LiDAR test completed: captured {captured_lines} line(s)')
                         return captured_lines
 
-                if max_lines is not None and captured_lines >= max_lines:
-                    print(f"LiDAR test completed: captured {captured_lines} line(s)")
-                    return captured_lines
+                    continue
 
-                continue
-
-            empty_reads += 1
-            if max_empty_reads is not None and empty_reads >= max_empty_reads:
-                wait_time = timeout * max_empty_reads
-                raise TimeoutError(
-                    f"No LiDAR data received from {port} after about "
-                    f"{wait_time:.1f} seconds"
-                )
+                empty_reads += 1
+                if max_empty_reads is not None and empty_reads >= max_empty_reads:
+                    wait_time = timeout * max_empty_reads
+                    raise TimeoutError(
+                        f'No LiDAR data received from {port} after about '
+                        f'{wait_time:.1f} seconds'
+                    )
+    finally:
+        if output_file is not None:
+            output_file.close()
 
 
 def render_lidar_view(
